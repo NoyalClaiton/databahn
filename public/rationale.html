@@ -1,0 +1,315 @@
+<title>Databahn Onboarding Rationale</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --paper: #f5f7fb;
+    --paper-raised: #ffffff;
+    --ink: #0d182b;
+    --ink-soft: #45536e;
+    --ink-faint: #7b879e;
+    --line: #dde3ee;
+    --accent: #2f6fd6;
+    --accent-soft: #eaf1fd;
+    --structural: #0c8f93;
+    --good: #1f9d73;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #050a12;
+      --paper-raised: #0d182b;
+      --ink: #eef2fa;
+      --ink-soft: #a9b6cc;
+      --ink-faint: #6c7996;
+      --line: #1c2940;
+      --accent: #4a94f9;
+      --accent-soft: rgba(74, 148, 249, 0.12);
+      --structural: #53d9ff;
+      --good: #29cc96;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #050a12;
+    --paper-raised: #0d182b;
+    --ink: #eef2fa;
+    --ink-soft: #a9b6cc;
+    --ink-faint: #6c7996;
+    --line: #1c2940;
+    --accent: #4a94f9;
+    --accent-soft: rgba(74, 148, 249, 0.12);
+    --structural: #53d9ff;
+    --good: #29cc96;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  code, .mono { font-family: 'DM Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  a { color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 660px);
+    gap: 48px;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 56px 32px 90px;
+  }
+  @media (max-width: 840px) {
+    .shell { grid-template-columns: 1fr; padding: 36px 20px 64px; }
+    .rail { display: none; }
+  }
+
+  .rail { position: sticky; top: 44px; align-self: start; }
+  .rail-eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 12px;
+  }
+  .rail ol { list-style: none; padding: 0; margin: 0; }
+  .rail li { padding: 0 0 14px 0; }
+  .rail a { display: block; font-size: 12.5px; color: var(--ink-soft); text-decoration: none; line-height: 1.4; }
+  .rail a:hover { color: var(--accent); }
+  .rail .n { font-family: 'DM Mono', monospace; font-size: 10.5px; color: var(--ink-faint); margin-right: 6px; }
+
+  .cover-eyebrow {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--structural); margin: 0 0 12px;
+  }
+  h1.title { font-size: 32px; line-height: 1.14; font-weight: 800; margin: 0 0 32px; }
+
+  section { margin-bottom: 40px; scroll-margin-top: 24px; }
+  .section-head {
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  }
+  .section-head .idx { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--structural); }
+  h2 { font-size: 18px; font-weight: 800; margin: 0; }
+  h3 { font-size: 14.5px; font-weight: 700; margin: 0 0 4px; }
+  p { margin: 0 0 12px; color: var(--ink); max-width: 64ch; }
+  p.lede { font-size: 15.5px; color: var(--ink-soft); }
+  ul { margin: 0 0 12px; padding-left: 20px; }
+  li { margin-bottom: 6px; max-width: 62ch; }
+  strong { color: var(--ink); font-weight: 600; }
+
+  .decision {
+    border: 1px solid var(--line); background: var(--paper-raised); border-radius: 8px;
+    padding: 14px 18px; margin: 12px 0;
+  }
+  .decision-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .decision-num {
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent);
+    background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; flex-shrink: 0;
+  }
+  .decision p { margin-bottom: 6px; font-size: 14px; }
+  .decision .built {
+    font-size: 12.5px; color: var(--ink-soft); border-top: 1px dashed var(--line);
+    padding-top: 8px; margin-top: 8px; margin-bottom: 0;
+  }
+  .decision .built strong { color: var(--structural); font-weight: 600; }
+
+  .law-table-wrap { overflow-x: auto; margin: 14px 0; }
+  table.laws { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.laws th {
+    text-align: left; font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--ink-faint); font-weight: 500;
+    padding: 0 10px 8px 0; border-bottom: 1px solid var(--line);
+  }
+  table.laws td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-soft); }
+  table.laws td.law { color: var(--structural); font-weight: 600; white-space: nowrap; }
+  table.laws tr:last-child td { border-bottom: none; }
+
+  .clickmath { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  @media (max-width: 560px) { .clickmath { grid-template-columns: 1fr; } }
+  .flowcard { border: 1px solid var(--line); background: var(--paper-raised); border-radius: 8px; padding: 14px 16px; }
+  .flowcard h4 {
+    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 700; margin: 0 0 2px;
+    color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .flowcard .total { font-family: 'DM Mono', monospace; font-size: 25px; font-weight: 500; color: var(--ink); margin: 0 0 8px; }
+  .flowcard .total .unit { font-size: 12px; color: var(--ink-faint); margin-left: 4px; }
+  .flowcard ol { list-style: none; margin: 0; padding: 0; }
+  .flowcard li {
+    display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--ink-soft);
+    padding: 5px 0; border-top: 1px solid var(--line); max-width: none;
+  }
+  .flowcard li:first-child { border-top: none; }
+  .flowcard li .c { font-family: 'DM Mono', monospace; color: var(--ink-faint); flex-shrink: 0; }
+
+  .caveat {
+    border-left: 3px solid var(--ink-faint); background: var(--paper-raised); border-radius: 0 8px 8px 0;
+    padding: 12px 16px; margin: 12px 0; font-size: 13px; color: var(--ink-soft);
+  }
+
+  footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-faint); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="rail-eyebrow">Contents</div>
+    <ol>
+      <li><a href="#assumptions"><span class="n">01</span>Assumptions</a></li>
+      <li><a href="#decisions"><span class="n">02</span>Key decisions</a></li>
+      <li><a href="#nav"><span class="n">03</span>Navigation & hierarchy</a></li>
+      <li><a href="#clicks"><span class="n">04</span>Click reduction</a></li>
+      <li><a href="#guidance"><span class="n">05</span>In-product guidance</a></li>
+      <li><a href="#laws"><span class="n">06</span>UX grounding</a></li>
+      <li><a href="#honest"><span class="n">07</span>What's simulated</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <p class="cover-eyebrow">Design Rationale, Source Onboarding</p>
+    <h1 class="title">Ten sources, two hours, zero SMEs</h1>
+
+    <section id="thesis">
+      <p class="lede">The brief names six problems: too many clicks, no guidance, SME dependency, weak hierarchy, unclear navigation, and an unmet ten-sources-in-two-hours goal. All six share one cause: every screen asked the customer to know something Databahn already knew. The fix, applied consistently: guessed and shown as a default, not asked as a blank field; explained in place, not filed in a knowledge base; built once as a shared shape, not rebuilt screen by screen for every connector.</p>
+    </section>
+
+    <section id="assumptions">
+      <div class="section-head"><span class="idx">01</span><h2>Assumptions</h2></div>
+      <p>This covers everyone from a first-time analyst to an admin onboarding their tenth source in one sitting, treated as one group, not two. Defaults help the beginner get through a screen with no prior knowledge. Progressive disclosure and session memory help the power user move faster on source ten than source one.</p>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head"><span class="idx">02</span><h2>Key decisions</h2></div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">01</span><h3>Guessed defaults, not blank fields</h3></div>
+        <p>Cruz pre-fills or pre-selects wherever a plausible default exists. The customer confirms rather than configures from zero, the biggest click-reduction lever in the redesign.</p>
+        <p class="built"><strong>Built:</strong> Palo Alto's log-type step pre-selects 10 of 13 by detection value, with a running GB/day estimate that updates live as it's toggled. Sentinel defaults to OAuth over a manual key; Splunk's index is Cruz-suggested, not a bare dropdown.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">02</span><h3>One wizard shape, every connector</h3></div>
+        <p>Every connector runs through the same shell: breadcrumb, step counter, progress rail, one fixed primary-action position. Familiarity compounds across a ten-source session.</p>
+        <p class="built"><strong>Built:</strong> both bespoke pairs and twenty-plus other connectors share one <code>OnboardingWizard</code>. Non-bespoke connectors run off a single generic wizard driven by a config object; adding connector 21 is a data change, not a new screen.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">03</span><h3>Two-tier guidance, not a knowledge-base tab</h3></div>
+        <p>Ambient inline hints cover the obvious majority. Cruz, reachable from any field and pre-seeded with what the customer was looking at, covers the rest.</p>
+        <p class="built"><strong>Built:</strong> Cruz's panel reads live session state, current step, filled fields, prior choices, so a question gets a step-specific answer instead of a generic one.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">04</span><h3>No silent waits, anywhere</h3></div>
+        <p>A working system that doesn't say so is the same black box an SME exists to patch around.</p>
+        <p class="built"><strong>Built:</strong> a shared live-test component shows real incoming sample lines the moment they arrive, live proof rather than a bare checkmark. The customer stays in control, one Continue click confirms it. On failure the component hands over a specific checklist plus retry and a non-blocking "continue, I'll send a sample later."</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">05</span><h3>Rules stay visible, never a gate</h3></div>
+        <p>Onboarding never asks for rule approval to proceed. At 900+ rules that would recreate the click problem one order of magnitude bigger.</p>
+        <p class="built"><strong>Built:</strong> Pipeline overview groups active rules into five categories, each with a plain-language reason and a live before/after sample. Every count recomputes live as rules are toggled.</p>
+      </div>
+    </section>
+
+    <section id="nav">
+      <div class="section-head"><span class="idx">03</span><h2>Navigation & hierarchy</h2></div>
+      <ul>
+        <li><strong>Persistent left rail</strong> (Dashboard, Sources, Destinations, Pipeline, Search, Graph) visible everywhere, collapsible without losing labels.</li>
+        <li><strong>Dashboard orients, Pipeline works.</strong> Dashboard answers "what needs me now," its funnel preview is explicitly labeled so it's never mistaken for the interactive version.</li>
+        <li><strong>Fixed wizard chrome.</strong> Same breadcrumb, step counter, and progress-rail position at every step, every connector.</li>
+        <li><strong>One decision per screen.</strong> A step asking two unrelated things is a defect, not a shortcut.</li>
+        <li><strong>One heading style, one metric tile</strong> app-wide, with color reserved for tiles that have a real good or bad state to report.</li>
+      </ul>
+    </section>
+
+    <section id="clicks">
+      <div class="section-head"><span class="idx">04</span><h2>Click reduction</h2></div>
+      <p>Every click on the first-time, defaults-accepted path, from picking the connector to a live pipeline.</p>
+
+      <div class="clickmath">
+        <div class="flowcard">
+          <h4>Palo Alto to Sentinel</h4>
+          <div class="total">12 <span class="unit">clicks, source to live pipeline</span></div>
+          <ol>
+            <li><span>Select Palo Alto</span><span class="c">1</span></li>
+            <li><span>Accept listener defaults</span><span class="c">1</span></li>
+            <li><span>Accept log-type selection</span><span class="c">1</span></li>
+            <li><span>Confirm after deploy</span><span class="c">1</span></li>
+            <li><span>Live test, then Continue</span><span class="c">1</span></li>
+            <li><span>Accept field mapping</span><span class="c">1</span></li>
+            <li><span>Route to a destination</span><span class="c">1</span></li>
+            <li><span>Select Sentinel</span><span class="c">1</span></li>
+            <li><span>Sign in with Microsoft</span><span class="c">1</span></li>
+            <li><span>Redirect, then Continue</span><span class="c">1</span></li>
+            <li><span>Live test, then Continue</span><span class="c">1</span></li>
+            <li><span>View this pipeline</span><span class="c">1</span></li>
+          </ol>
+        </div>
+        <div class="flowcard">
+          <h4>Entra ID to Splunk</h4>
+          <div class="total">12 <span class="unit">clicks + 2 pasted fields</span></div>
+          <ol>
+            <li><span>Select Entra ID</span><span class="c">1</span></li>
+            <li><span>Sign in with Microsoft</span><span class="c">1</span></li>
+            <li><span>Redirect, then Continue</span><span class="c">1</span></li>
+            <li><span>Accept scopes</span><span class="c">1</span></li>
+            <li><span>Accept log categories</span><span class="c">1</span></li>
+            <li><span>Live test, then Continue</span><span class="c">1</span></li>
+            <li><span>Accept field mapping</span><span class="c">1</span></li>
+            <li><span>Route to a destination</span><span class="c">1</span></li>
+            <li><span>Select Splunk</span><span class="c">1</span></li>
+            <li><span>Paste HEC URL + token, Continue</span><span class="c">2 fields + 1</span></li>
+            <li><span>Live test, then Continue</span><span class="c">1</span></li>
+            <li><span>View this pipeline</span><span class="c">1</span></li>
+          </ol>
+        </div>
+      </div>
+
+      <p>Two mechanisms keep that count low. Session reuse means a second source routed to an already-connected destination skips setup entirely, one click instead of the four or five above. Accepted defaults stand in for what would otherwise be several separate field entries, a single Continue confirming a proposed port, scope list, or table name instead of typing each one. Every test step still ends on a manual Continue, by design, the live proof is worth a deliberate look before moving on, not a click removed for its own sake.</p>
+    </section>
+
+    <section id="guidance">
+      <div class="section-head"><span class="idx">05</span><h2>In-product guidance</h2></div>
+      <p>A skippable coach-mark tour offers itself once on first visit, replayable later from the header. The distinction that matters isn't the panel, it's what Cruz already knows when it opens: current step, filled fields, prior choices this session. That's the real difference between in-product documentation and a search box that happens to live inside the product, the second one still makes the customer re-explain where they are.</p>
+    </section>
+
+    <section id="laws">
+      <div class="section-head"><span class="idx">06</span><h2>UX grounding</h2></div>
+      <div class="law-table-wrap">
+        <table class="laws">
+          <thead><tr><th>Decision</th><th>Grounding</th></tr></thead>
+          <tbody>
+            <tr><td>No silent waits, ever</td><td class="law">Nielsen #1</td></tr>
+            <tr><td>Plain language, Cruz translating jargon</td><td class="law">Nielsen #2</td></tr>
+            <tr><td>Reversible rules, skippable tour</td><td class="law">Nielsen #3</td></tr>
+            <tr><td>One wizard shape everywhere</td><td class="law">Nielsen #4</td></tr>
+            <tr><td>Cruz carries session state</td><td class="law">Nielsen #6</td></tr>
+            <tr><td>OAuth default, manual behind a toggle</td><td class="law">Nielsen #7</td></tr>
+            <tr><td>One decision per screen</td><td class="law">Hick's Law</td></tr>
+            <tr><td>Specific checklists, never a bare failure</td><td class="law">Nielsen #9</td></tr>
+            <tr><td>Five rule categories, not a flat list</td><td class="law">Miller's Law</td></tr>
+            <tr><td>Fixed CTA position and size, every step</td><td class="law">Fitts's Law</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="honest">
+      <div class="section-head"><span class="idx">07</span><h2>What's simulated</h2></div>
+      <div class="caveat">
+        This is a client-side prototype with no backend, built to be demoable live. Dollar figures use a published-list-rate table, labeled as an estimate with the rate shown, never presented as a real invoice. Live-test timings are compressed from the plan's real figures so a walkthrough doesn't cost real dead air. The same disclosure appears in the product itself, not only here.
+      </div>
+    </section>
+
+    <footer>Design Rationale, Databahn onboarding redesign. Every figure in §04 and every "Built" note in §02 is checkable against the running prototype.</footer>
+  </main>
+</div>
