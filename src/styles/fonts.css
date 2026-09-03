@@ -1,0 +1,117 @@
+/* Open Sauce Sans (Databahn's real heading font) is not distributed via Google Fonts,
+   so headings and body both use Inter, confirmed available, and close in spirit
+   (clean, geometric-humanist). DM Mono is Databahn's real technical/numeric font
+   and IS on Google Fonts, so it's used as specified. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+
+/* Cruz panel input placeholder */
+.cruz-input::placeholder {
+  color: rgba(83, 217, 255, 0.35);
+}
+
+/* LiveStatus pulsing "active" indicator */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+.live-pulse-dot {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-pulse-dot { animation: none !important; }
+}
+
+/* Glass-card surface, backdrop-blur + soft glow border, applied to every
+   card-like surface (wizard steps, Cruz panel, rule panel, catalog cards)
+   so the product reads as premium/alive, not flat. */
+.glass-card {
+  background: linear-gradient(180deg, rgba(74, 148, 249, 0.06), rgba(13, 24, 43, 0.4));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 1px 0 0 rgba(128, 180, 250, 0.08) inset, 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+}
+
+/* ReefGraph sizes its own canvas (560px, drag-resizable) with an inline style,
+   which is right for the standalone /graph page but too tall for a graph that
+   expands inside a search result row. Bounding it here keeps the shared graph
+   component untouched, and its SVG uses preserveAspectRatio so the scene and
+   the overlay controls scale to fit rather than getting clipped. */
+.reef-inline-graph > div {
+  height: 420px !important;
+}
+
+/* Cruz launcher, breathing glow to invite interaction, not just sit there. */
+@keyframes cruz-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 148, 249, 0.5), 0 4px 20px rgba(74, 148, 249, 0.35); }
+  50% { box-shadow: 0 0 0 10px rgba(74, 148, 249, 0), 0 4px 24px rgba(74, 148, 249, 0.5); }
+}
+.cruz-breathe {
+  animation: cruz-breathe 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cruz-breathe { animation: none !important; }
+}
+
+/* Success radiating ring, the Peak-End moment gets real presence. */
+@keyframes success-ring {
+  0% { opacity: 0.55; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+.success-ring {
+  animation: success-ring 1.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .success-ring { animation: none !important; display: none; }
+}
+
+/* Listening card, an animated conic border sweep so the wait state itself
+   feels alive, not a static box with a pulse dot inside it. */
+@keyframes listening-sweep {
+  0% { --sweep-angle: 0deg; }
+  100% { --sweep-angle: 360deg; }
+}
+.listening-border {
+  position: relative;
+}
+.listening-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--sweep-angle, 0deg), transparent 0%, var(--db-cyan-light) 15%, transparent 30%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: listening-sweep 2.4s linear infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .listening-border::before { animation: none !important; opacity: 0; }
+}
+
+/* Checkbox check mark, pops in on check rather than appearing instantly. */
+@keyframes check-pop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+.check-pop {
+  animation: check-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .check-pop { animation: none !important; }
+}
+
+/* "Connected" badge, pops in rather than appearing instantly. */
+@keyframes badge-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.badge-pop {
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-pop { animation: none !important; }
+}

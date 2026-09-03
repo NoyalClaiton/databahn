@@ -1,0 +1,270 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { X, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { Switch } from "@/app/components/ui/switch";
+import { groupByCategory, liveCategoryStats, RULE_LIBRARY_TOTAL, type ReductionRule } from "@/app/data/rules";
+import { CONNECTORS } from "@/app/data/connectors";
+
+/** The drawer is the quick glimpse, not the place to scroll through 300+
+ * rows, that's what the full rules page is for. Capped per category, with
+ * an explicit "N more" so it's obvious the list keeps going, not that this
+ * is genuinely everything. */
+const DRAWER_PREVIEW_LIMIT = 6;
+
+/**
+ * Principle 9, the actual review surface, never a blocking gate. Grouped by
+ * category, plain-language reason, live before/after sample, individually
+ * toggleable. Reached by clicking the Highway band or a specific source's
+ * segment (scoped filtering happens by whoever renders this, via `rules`).
+ */
+export function RulePanel({
+  rules,
+  scopeLabel,
+  sourceId,
+  category,
+  onToggle,
+  onClose,
+  focusRuleId,
+}: {
+  rules: ReductionRule[];
+  scopeLabel: string;
+  /** When set, only this rule category is shown, so clicking a pipeline stage
+   * lands on the rules that stage actually applies. */
+  category?: string;
+  /** When set, counts are scoped to that source rather than the whole pipeline. */
+  sourceId?: string;
+  onToggle: (id: string) => void;
+  onClose: () => void;
+  /** Opened from "View in Pipeline" on a just-proposed rule, that rule is
+   * the whole reason the panel opened, landing on a wall of 900+ rules with
+   * no indication which one is new isn't actually an answer to "where do I
+   * go next." */
+  focusRuleId?: string;
+}) {
+  const navigate = useNavigate();
+  const stats = liveCategoryStats(rules, sourceId);
+  // Every category the current scope contains, so the drawer can switch
+  // between them in place rather than sending the user back to the pipeline
+  // to click a different stage.
+  const allCategories = Array.from(new Set(stats.map((c) => c.category)));
+  const [active, setActive] = useState<string | null>(category ?? null);
+  const focusRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (focusRuleId) focusRef.current?.scrollIntoView({ block: "center" });
+  }, [focusRuleId]);
+  const scoped = active ? rules.filter((r) => r.category === active) : rules;
+  const grouped = groupByCategory(scoped);
+  const totals = stats.reduce(
+    (a, c) => ({ applicable: a.applicable + c.applicable, active: a.active + c.active }),
+    { applicable: 0, active: 0 },
+  );
+  const statFor = (category: string) => {
+    const rows = stats.filter((c) => c.category === category);
+    return rows.reduce(
+      (a, c) => ({ applicable: a.applicable + c.applicable, active: a.active + c.active }),
+      { applicable: 0, active: 0 },
+    );
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[95] bg-background/70 backdrop-blur-sm flex justify-end"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ x: 40, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: 40, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md h-full bg-card border-l border-border overflow-y-auto"
+          role="dialog"
+          aria-label="Reduction rules"
+        >
+          {/* Header and tabs are one sticky unit, not two independently
+              positioned ones, a hardcoded pixel offset between them (the
+              previous approach) silently breaks the moment either row's
+              content height changes, letting a rule row's switch show
+              through the gap while scrolling. */}
+          <div className="sticky top-0 z-10 bg-card">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div>
+                <p className="text-sm font-medium text-foreground">Reduction rules</p>
+                <p className="text-xs text-muted-foreground">
+                  {active ?? scopeLabel} · <span className="font-mono-db">{active ? statFor(active).active : totals.active}</span> of{" "}
+                  <span className="font-mono-db">{active ? statFor(active).applicable : totals.applicable}</span> applicable active
+                </p>
+              </div>
+              <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* This is a quick glimpse, not the browsing surface, every rule
+                really does live below (nothing invented), just capped per
+                category so a 300+ rule scope doesn't turn into an endless
+                scroll in a narrow drawer. */}
+            <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-border bg-muted/10">
+              <p className="text-[11px] text-muted-foreground/70">
+                A quick preview of your active rules, capped per category below.
+              </p>
+              <button
+                onClick={() => navigate("/rules", { state: { sourceId, category: active ?? undefined } })}
+                className="text-[11px] font-medium text-primary hover:text-primary/80 underline underline-offset-2 inline-flex items-center gap-1 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                Browse all rules
+                <ArrowRight className="w-3 h-3" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* category tabs */}
+            <div className="flex flex-wrap gap-1.5 px-5 py-3 border-b border-border">
+              <button
+                onClick={() => setActive(null)}
+                className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                  !active ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All ({totals.active})
+              </button>
+              {allCategories.map((c) => {
+                const st = statFor(c);
+                return (
+                  <button
+                    key={c}
+                    onClick={() => setActive(active === c ? null : c)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                      active === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {c.replace(" & heartbeat suppression", "").replace("-noise trimming", " noise")} ({st.active})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="p-5 space-y-6">
+            {grouped.map(([category, categoryRules]) => {
+              // The just-proposed rule is the whole reason this panel might
+              // be open, a hard cap that hides it would silently defeat the
+              // focus/scroll feature, so it always gets a seat even past the
+              // preview limit.
+              const focusInCategory = categoryRules.find((r) => r.id === focusRuleId);
+              const preview = categoryRules.slice(0, DRAWER_PREVIEW_LIMIT);
+              const shown =
+                focusInCategory && !preview.includes(focusInCategory) ? [...preview, focusInCategory] : preview;
+              const hiddenCount = categoryRules.length - shown.length;
+              return (
+                <div key={category}>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{category}</p>
+                    <p className="text-[11px] font-mono-db text-muted-foreground">
+                      {statFor(category).active}/{statFor(category).applicable} on
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {shown.map((rule) => (
+                      <RuleRow
+                        key={rule.id}
+                        rule={rule}
+                        onToggle={() => onToggle(rule.id)}
+                        focusRef={rule.id === focusRuleId ? focusRef : undefined}
+                        isFocused={rule.id === focusRuleId}
+                      />
+                    ))}
+                  </div>
+                  {hiddenCount > 0 && (
+                    <button
+                      onClick={() => navigate("/rules", { state: { sourceId, category } })}
+                      className="mt-2 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                    >
+                      +{hiddenCount} more in this category
+                      <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {scoped.length === 0 && <p className="text-sm text-muted-foreground">No rules applied in this scope.</p>}
+
+            <p className="text-[11px] text-muted-foreground/70 border-t border-border pt-4">
+              Databahn maintains {RULE_LIBRARY_TOTAL}+ security-specific reduction rules,{" "}
+              <span className="font-mono-db">{totals.applicable}</span> of them applicable in this scope.
+            </p>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+export function RuleRow({
+  rule,
+  onToggle,
+  focusRef,
+  isFocused,
+}: {
+  rule: ReductionRule;
+  onToggle: () => void;
+  focusRef?: React.RefObject<HTMLDivElement | null>;
+  isFocused?: boolean;
+}) {
+  // Most rules apply to exactly one source, showing that back would just be
+  // noise, this only earns its place once a rule genuinely spans more than
+  // one, most likely a compliance exclusion raised from a Search result.
+  const appliesTo =
+    rule.sourceIds.length > 1
+      ? rule.sourceIds.map((id) => CONNECTORS.find((c) => c.id === id)?.name ?? id).join(", ")
+      : null;
+  return (
+    <div
+      ref={focusRef}
+      className={`rounded-lg border p-3 transition-colors ${
+        isFocused ? "border-primary/60 ring-1 ring-primary/30 bg-primary/[0.03]" : "border-border"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm text-foreground font-medium">{rule.name}</p>
+            {isFocused && (
+              <span className="text-[10px] uppercase tracking-wide text-primary bg-primary/15 px-1.5 py-[1px] rounded-full font-medium shrink-0">
+                Just proposed
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{rule.reason}</p>
+          {appliesTo && <p className="text-[11px] text-info/80 mt-1">Applies to: {appliesTo}</p>}
+          {isFocused && !rule.enabled && (
+            <p className="text-[11px] text-amber-400 mt-1">Off until you review and turn it on.</p>
+          )}
+        </div>
+        <Switch checked={rule.enabled} onCheckedChange={onToggle} aria-label={`Toggle ${rule.name}`} />
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-1.5 font-mono-db text-[11px]">
+        {/* Bare before/after lines read as broken text, not a diff, unless
+            you already know the convention, labeling makes the strikethrough
+            legible on its own instead of relying on that assumption. */}
+        <div className="flex items-baseline gap-1.5">
+          <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground/50">Raw</span>
+          <span className={rule.enabled ? "text-muted-foreground line-through decoration-destructive/50" : "text-muted-foreground"}>
+            {rule.before}
+          </span>
+        </div>
+        {rule.enabled && (
+          <div className="flex items-baseline gap-1.5">
+            <span className="shrink-0 text-[9px] uppercase tracking-wide text-success/50">Kept</span>
+            <span className="text-success/90">{rule.after}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,141 @@
+/* Databahn design tokens, sourced from databahn.ai's shipped CSS (--colors--*),
+   not invented. Single dark theme by default: enterprise security-ops tools are
+   dark-themed by convention (matches Databahn's own site, and the reference
+   Indigo app). Token NAMES follow the shadcn contract so the copied ui/ primitives
+   (button, dialog, input, etc.) work unmodified, only VALUES changed. */
+
+:root {
+  --font-size: 15px;
+
+  /* Databahn brand scale, verbatim from their shipped CSS */
+  --db-blue-darkest: #050a12;
+  --db-blue-darker: #0d182b;
+  --db-blue-dark: #223566;
+  --db-blue: #4a94f9;
+  --db-blue-light: #80b4fa;
+  --db-blue-lighter: #dae9fd;
+  --db-cyan-dark: #34a4cf;
+  --db-cyan-light: #53d9ff;
+  --db-teal-dark: #146366;
+  --db-teal: #0fb4ba;
+  --db-green: #29cc96;
+  --db-red: #e55c5c;
+  --db-neutral-70: #b2b5be;
+  --db-neutral-95: #eef0fa;
+  --db-neutral-100: #fdfbff;
+
+  --background: var(--db-blue-darkest);
+  --foreground: var(--db-neutral-95);
+  --card: var(--db-blue-darker);
+  --card-foreground: var(--db-neutral-95);
+  --popover: var(--db-blue-darker);
+  --popover-foreground: var(--db-neutral-95);
+  --primary: var(--db-blue);
+  --primary-foreground: var(--db-neutral-100);
+  --secondary: var(--db-blue-dark);
+  --secondary-foreground: var(--db-neutral-95);
+  --muted: var(--db-blue-dark);
+  --muted-foreground: var(--db-neutral-70);
+  --accent: var(--db-cyan-light);
+  --accent-foreground: var(--db-blue-darkest);
+  --destructive: var(--db-red);
+  --destructive-foreground: var(--db-neutral-100);
+  --success: var(--db-green);
+  --success-foreground: var(--db-blue-darkest);
+  --info: var(--db-teal);
+  --info-foreground: var(--db-blue-darkest);
+  --border: rgba(128, 180, 250, 0.14);
+  --input: rgba(128, 180, 250, 0.10);
+  --input-background: var(--db-blue-darker);
+  --switch-background: var(--db-blue-dark);
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: var(--db-cyan-light);
+  --chart-1: var(--db-blue);
+  --chart-2: var(--db-cyan-light);
+  --chart-3: var(--db-teal);
+  --chart-4: var(--db-green);
+  --chart-5: var(--db-blue-light);
+  --radius: 4px;
+  --sidebar: var(--db-blue-darker);
+  --sidebar-foreground: var(--db-neutral-95);
+  --sidebar-primary: var(--db-blue);
+  --sidebar-primary-foreground: var(--db-neutral-100);
+  --sidebar-accent: var(--db-blue-dark);
+  --sidebar-accent-foreground: var(--db-neutral-95);
+  --sidebar-border: rgba(128, 180, 250, 0.14);
+  --sidebar-ring: var(--db-blue);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  /* Base fill only. All atmospheric layering lives in AtmosphericBackground
+     so it composes in one place instead of fighting a body gradient. */
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1, h2, h3, h4 {
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+  }
+
+  /* DM Mono: numeric/technical readouts only (volumes, ports, IPs, timestamps),
+     never section headers or body copy. Applied via .font-mono-db utility. */
+  .font-mono-db {
+    font-family: 'DM Mono', ui-monospace, monospace;
+  }
+}
