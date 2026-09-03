@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Database, Send, Waypoints, Search, Share2, ListFilter,
   LogOut, UserRound, HelpCircle, PanelLeftClose, PanelLeftOpen,
@@ -335,6 +335,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const replayTour = () => setTourRestart((n) => n + 1);
   const { resetSession } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Safety net: never let the tour stay blocked if the intro fails to report
   // completion for any reason. The intro can't run longer than this.
@@ -474,7 +475,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="flex-1 px-6 lg:px-12 py-10 lg:py-14 overflow-y-auto">{children}</main>
         <CruzAssistant />
       </div>
-      <GuidedTourOverlay readyToStart={introDone} restartSignal={tourRestart} />
+      {/* Auto-start only from the dashboard, not on every first visit
+          regardless of route. The tour's first step navigates to Sources
+          on its own, so auto-starting it on someone's very first look at a
+          direct link they were sent (Pipeline, say) yanked them away from
+          the exact page that link pointed at before they saw it. It still
+          offers itself the moment a first-time visitor reaches the
+          dashboard, on their own or after that deep link. */}
+      <GuidedTourOverlay readyToStart={introDone && location.pathname === "/"} restartSignal={tourRestart} />
       <AnimatePresence>
         {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       </AnimatePresence>

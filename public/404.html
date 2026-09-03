@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Databahn</title>
+    <!--
+      GitHub Pages has no server to route requests, so a direct visit or a
+      refresh at any real app route (/databahn/pipeline, say) isn't a file
+      that exists and Pages serves this 404 page instead of that route.
+      This script re-encodes the path the visitor actually wanted into a
+      query string and redirects to the real index.html, which decodes it
+      back (see the matching script in index.html) before React Router ever
+      mounts, so the visitor lands on the route they asked for, not a dead
+      404 or silently bounced to the homepage.
+    -->
+    <script>
+      var path = location.pathname + location.search + location.hash;
+      location.replace('/databahn/?redirect=' + encodeURIComponent(path));
+    </script>
+  </head>
+  <body></body>
+</html>

@@ -7,6 +7,16 @@
     <meta name="description" content="Databahn source and destination onboarding: connect a data source and route it to your SIEM in minutes, guided end to end by Cruz." />
     <meta name="robots" content="noindex, nofollow" />
     <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+    <!-- Pairs with public/404.html's redirect: restores the real path the
+         visitor asked for before React Router mounts and reads the URL,
+         so a direct link or a refresh at /pipeline lands there, not on the
+         homepage or a 404 GitHub Pages served along the way. -->
+    <script>
+      (function () {
+        var redirect = new URLSearchParams(location.search).get('redirect');
+        if (redirect) history.replaceState(null, '', redirect);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

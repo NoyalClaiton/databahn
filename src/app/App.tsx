@@ -60,7 +60,10 @@ export default function App() {
   return (
     <SessionProvider>
       <CruzWithSession>
-        <BrowserRouter>
+        {/* BASE_URL mirrors vite.config.ts's `base` automatically, so this
+            never needs to be kept in sync with that value by hand, hardcode
+            "/databahn/" here and the two would eventually drift. */}
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
           <AppShell>
             <AnimatedRoutes />
           </AppShell>
