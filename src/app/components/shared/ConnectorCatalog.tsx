@@ -38,7 +38,14 @@ export function ConnectorCatalogCard({
       whileTap={{ scale: 0.99 }}
       className={`group relative h-full w-full flex flex-col text-left rounded-lg border p-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         connected
-          ? "border-success/40 bg-success/[0.04] hover:border-success/60 hover:shadow-[0_10px_40px_-12px_rgba(41,204,150,0.35)]"
+          ? // The green tint is the "this one is live" signal and stays a
+            // distinct color from every other card, but it was dropping the
+            // glass surface treatment entirely, connected cards on a source
+            // or destination page went flat the moment they connected,
+            // backdrop-blur-lg restores the same frosted-glass depth
+            // (matching .glass-card's own blur(16px)) without fighting the
+            // custom class's own background gradient over the green tint.
+            "border-success/40 bg-success/[0.04] backdrop-blur-lg hover:border-success/60 hover:shadow-[0_10px_40px_-12px_rgba(41,204,150,0.35)]"
           : "border-border glass-card hover:border-primary/40"
       }`}
     >

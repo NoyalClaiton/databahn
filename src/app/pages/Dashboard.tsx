@@ -61,7 +61,7 @@ function OnboardingPath() {
           <div
             className={`rounded border p-5 transition-all ${
               step.done
-                ? "border-success/25 bg-success/[0.04]"
+                ? "border-success/25 bg-success/[0.04] backdrop-blur-lg"
                 : step.active
                 ? "border-primary/50 glass-card listening-border"
                 : step.locked
