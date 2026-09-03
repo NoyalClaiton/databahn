@@ -48,7 +48,8 @@ export default function SourceEntraId() {
     {
       id: "redirecting",
       label: "Redirecting to Microsoft",
-      render: ({ advance }) => <RedirectingToProvider provider="Microsoft" onDone={advance} />,
+      render: () => <RedirectingToProvider provider="Microsoft" />,
+      primary: { label: "Continue" },
     },
     {
       id: "scopes",

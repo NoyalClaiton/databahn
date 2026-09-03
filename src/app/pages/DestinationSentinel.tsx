@@ -128,7 +128,8 @@ export default function DestinationSentinel() {
           {
             id: "redirecting",
             label: "Redirecting to Microsoft",
-            render: ({ advance }: { advance: () => void }) => <RedirectingToProvider provider="Microsoft" onDone={advance} />,
+            render: () => <RedirectingToProvider provider="Microsoft" />,
+            primary: { label: "Continue" },
           },
         ]
       : []),

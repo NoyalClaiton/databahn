@@ -1,23 +1,17 @@
-import { useEffect } from "react";
 import { motion } from "motion/react";
 import { ExternalLink } from "lucide-react";
-
-const REDIRECT_MS = 1200;
 
 /**
  * "Sign in with Microsoft" can't trigger a real OAuth redirect here, there's
  * no backend or app registration behind this prototype to hand a token back
  * to. But silently jumping straight to a Databahn-styled "review access"
  * screen misrepresents whose screen that actually is in the real product,
- * Microsoft's, not ours. This beat sells the handoff instead of hiding it,
- * then auto-advances once it's played out.
+ * Microsoft's, not ours. This beat sells the handoff instead of hiding it.
+ * Purely visual, the step's own Continue button (same fixed position every
+ * other step uses) is what actually advances, not a timer on this component,
+ * nothing here auto-advances anything.
  */
-export function RedirectingToProvider({ provider, onDone }: { provider: string; onDone: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onDone, REDIRECT_MS);
-    return () => clearTimeout(t);
-  }, [onDone]);
-
+export function RedirectingToProvider({ provider }: { provider: string }) {
   return (
     <div className="flex flex-col items-center justify-center text-center h-full py-10">
       <motion.div
