@@ -3,9 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Databahn — Onboarding</title>
+    <title>Databahn Onboarding</title>
     <meta name="description" content="Databahn source and destination onboarding: connect a data source and route it to your SIEM in minutes, guided end to end by Cruz." />
     <meta name="robots" content="noindex, nofollow" />
+    <!-- The BASE_URL token below is Vite's own placeholder, it resolves to
+         vite.config.ts's `base` at build time, hardcoding the path here
+         instead would silently break the moment that config value changes. -->
+    <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%BASE_URL%favicon-16.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
     <!-- Pairs with public/404.html's redirect: restores the real path the
          visitor asked for before React Router mounts and reads the URL,

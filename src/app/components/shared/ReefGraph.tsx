@@ -951,7 +951,7 @@ export function ReefGraph({
                       same edge label can be the grammatical subject from one
                       end and the object from the other ("j.rivera signed in
                       from this IP" vs "this IP [?] signed in from j.rivera"
-                      makes no sense) — an arrow reads correctly either way. */}
+                      makes no sense), an arrow reads correctly either way. */}
                   {selectedConnections.in.map((c, i) => (
                     <p key={`in-${i}`} style={{ fontFamily: F.sans, fontSize: 11, color: "rgba(220,222,232,0.85)", lineHeight: 1.4 }}>
                       <span style={{ color: "rgba(83,217,255,0.85)" }}>&larr; </span>

@@ -50,7 +50,7 @@ export const RANGE_FACTOR: Record<string, number> = { "1H": 1.18, "24H": 1, "7D"
 const ROW_H = 58;
 const ROW_GAP = 10;
 const THREADS = 5;
-/** Width of each HTML card column in pixels — must match the w-[268px] Tailwind class. */
+/** Width of each HTML card column in pixels, must match the w-[268px] Tailwind class. */
 const COL_W = 268;
 
 function ribbon(x1: number, t1: number, b1: number, x2: number, t2: number, b2: number) {
