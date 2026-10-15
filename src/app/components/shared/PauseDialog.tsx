@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { PauseCircle } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
+import { useEscape } from "@/app/lib/useEscape";
 
 const OPTIONS: { id: string; label: string; until: () => number }[] = [
   { id: "1h", label: "1 hour", until: () => Date.now() + 3600000 },
@@ -33,6 +34,7 @@ export function PauseDialog({
   onCancel: () => void;
   onConfirm: (until: number, reason: string) => void;
 }) {
+  useEscape(onCancel);
   const [choice, setChoice] = useState("4h");
   const [reason, setReason] = useState("");
   // Portalled, so it centres on the window wherever it's opened from.

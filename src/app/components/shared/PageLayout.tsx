@@ -168,3 +168,32 @@ export function StaggerItem({ index, children }: { index: number; children: Reac
 /** Every right-side drawer (source/destination details, rules, routing,
  * cold storage) shares this width, so they all open to the same edge. */
 export const DRAWER_WIDTH = "max-w-[800px]";
+
+/** The page-level time range control (Dashboard, Savings): one look, one
+ * behaviour, wherever a page is scoped to a period. */
+export function RangeToggle({
+  range,
+  setRange,
+  ranges = ["24H", "7D", "30D"],
+}: {
+  range: string;
+  setRange: (r: string) => void;
+  ranges?: readonly string[];
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-border bg-background/40 p-1" role="group" aria-label="Time range">
+      {ranges.map((r) => (
+        <button
+          key={r}
+          onClick={() => setRange(r)}
+          aria-pressed={range === r}
+          className={`text-xs px-2.5 py-1 rounded font-mono-db transition-colors ${
+            range === r ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {r}
+        </button>
+      ))}
+    </div>
+  );
+}

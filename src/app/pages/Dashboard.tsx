@@ -7,7 +7,7 @@ import {
   UserCheck, ShieldPlus, PiggyBank, RotateCcw, FlaskConical, Repeat, Briefcase, Wrench, type LucideIcon,
 } from "lucide-react";
 import { useSession, type DashboardLens } from "@/app/lib/SessionContext";
-import { PageHeader, SectionHeading, StatTile, StaggerItem } from "@/app/components/shared/PageLayout";
+import { RangeToggle, PageHeader, SectionHeading, StatTile, StaggerItem } from "@/app/components/shared/PageLayout";
 import {
   buildSavings, buildActivity, rateFor,
   type SourceSaving, type Savings, type ActivityEvent,
@@ -36,24 +36,6 @@ const RANGES = ["24H", "7D", "30D"] as const;
 /** Someone checking daily and someone checking weekly want the same page
  * over a different window, so the window is a control, not a guess about
  * who's looking. */
-function RangeToggle({ range, setRange }: { range: string; setRange: (r: string) => void }) {
-  return (
-    <div className="flex items-center gap-1 rounded-lg border border-border bg-background/40 p-1" role="group" aria-label="Time range">
-      {RANGES.map((r) => (
-        <button
-          key={r}
-          onClick={() => setRange(r)}
-          aria-pressed={range === r}
-          className={`text-xs px-2.5 py-1 rounded font-mono-db transition-colors ${
-            range === r ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {r}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /** Two audiences, one dashboard. A segmented control rather than a
  * dropdown: with two roles both stay visible and switching is one click.
@@ -236,8 +218,8 @@ function EnvironmentStatus({ env, range, lens, monthlySaving }: { env: Environme
   const open = alerts.filter((a) => a.kind === "incident").length;
 
   const parts = [
-    notSending && `${notSending} source${notSending === 1 ? " isn't" : "s aren't"} sending`,
-    counts.degraded && `${counts.degraded} ${counts.degraded === 1 ? "is" : "are"} below normal`,
+    notSending && `${notSending} source${notSending === 1 ? " has" : "s have"} stopped`,
+    counts.degraded && `${counts.degraded} ${counts.degraded === 1 ? "is" : "are"} degraded`,
     destProblems.length && `${destProblems.length} destination${destProblems.length === 1 ? " isn't" : "s aren't"} accepting everything`,
   ].filter(Boolean) as string[];
 
@@ -289,12 +271,12 @@ function EnvironmentStatus({ env, range, lens, monthlySaving }: { env: Environme
           value={`${total - counts.stopped - counts.paused}/${total}`}
           tone={counts.stopped > 0 ? "warning" : "good"}
           sub={
-            [counts.stopped && `${counts.stopped} not sending`, counts.degraded && `${counts.degraded} below normal`, counts.paused && `${counts.paused} paused`]
+            [counts.stopped && `${counts.stopped} stopped`, counts.degraded && `${counts.degraded} degraded`, counts.paused && `${counts.paused} paused`]
               .filter(Boolean)
               .join(" · ") || "every source is sending"
           }
           onClick={counts.stopped + counts.degraded > 0 ? () => navigate("/pipeline", { state: { healthFilter: "issues" } }) : undefined}
-          actionLabel="See which"
+          actionLabel="Show affected sources"
         />
         <StatTile
           icon={Send}
@@ -324,7 +306,7 @@ function EnvironmentStatus({ env, range, lens, monthlySaving }: { env: Environme
         <StatTile
           icon={Gauge}
           label={`Availability · ${range}`}
-          value={`${(avail.pct * 100).toFixed(avail.pct > 0.999 ? 2 : 1)}%`}
+          value={avail.pct >= 1 ? "100%" : `${(avail.pct * 100).toFixed(avail.pct > 0.999 ? 2 : 1)}%`}
           sub={`${open} open incident${open === 1 ? "" : "s"} · ${avail.resolved} resolved in ${range}`}
         />
       </div>
@@ -352,7 +334,7 @@ const SEVERITY_EDGE: Record<Alert["severity"], string> = {
   low: "rgba(178,181,190,0.5)",
 };
 
-function AlertsList({ alerts, onOpen }: { alerts: Alert[]; onOpen: (a: Alert) => void }) {
+function AlertsList({ alerts, onOpen, hasDestinations = true }: { alerts: Alert[]; onOpen: (a: Alert) => void; hasDestinations?: boolean }) {
   const [filter, setFilter] = useState<Severity | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -363,7 +345,9 @@ function AlertsList({ alerts, onOpen }: { alerts: Alert[]; onOpen: (a: Alert) =>
         <div>
           <p className="text-sm text-foreground">No open alerts</p>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            Every source is arriving normally and every destination is accepting data.
+            {hasDestinations
+              ? "Every source is arriving normally and every destination is accepting data."
+              : "Every source is arriving normally. Nothing is being delivered until a destination is connected."}
           </p>
         </div>
       </div>
@@ -574,6 +558,7 @@ function Recommendations({ recs, onDismiss }: { recs: Rec[]; onDismiss: (id: str
  * Pipeline answers "what is being filtered"; these answer "what is that
  * worth", which is the same traffic in the unit that reaches an invoice. */
 function CostTiles({ savings, reductionPct }: { savings: Savings; reductionPct: number }) {
+  const navigate = useNavigate();
   const prefix = savings.isPotential ? "~" : "";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -582,6 +567,8 @@ function CostTiles({ savings, reductionPct }: { savings: Savings; reductionPct: 
         label={savings.isPotential ? "Projected monthly saving" : "Monthly saving"}
         value={`${prefix}${usd(savings.monthlyUsd)}`}
         sub={savings.isPotential ? "once routed to a destination" : `${usd(savings.annualUsd)} a year at current rules`}
+        onClick={() => navigate("/savings")}
+        actionLabel="See savings"
       />
       <StatTile icon={TrendingDown} label="Volume reduced" value={`${reductionPct}%`} sub={`${fmtGb(savings.gbPerDayFiltered)}/day never billed`} />
       <StatTile
@@ -604,12 +591,14 @@ const SAVINGS_VISIBLE = 5;
  * pays off, and that's always the top few. */
 function SavingsBySource({ perSource }: { perSource: SourceSaving[] }) {
   const navigate = useNavigate();
+  const maxSaving = Math.max(...perSource.map((x) => x.monthlyUsd), 1);
   return (
     <div className="rounded border border-border glass-card divide-y divide-border">
       {perSource.slice(0, SAVINGS_VISIBLE).map((s) => (
         <button
           key={s.id}
-          onClick={() => navigate("/pipeline")}
+          // Lands on the Savings page with this source already expanded.
+          onClick={() => navigate("/savings", { state: { expand: s.id } })}
           className="w-full text-left p-4 hover:bg-muted/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring first:rounded-t last:rounded-b"
         >
           <div className="flex items-baseline justify-between gap-4 mb-2">
@@ -628,7 +617,9 @@ function SavingsBySource({ perSource }: { perSource: SourceSaving[] }) {
             </span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-muted/30 overflow-hidden mb-2">
-            <div className="h-full rounded-full transition-all opacity-70" style={{ width: `${s.reductionFactor * 100}%`, background: "var(--db-green)" }} />
+            {/* Sized by the saving itself, relative to the largest: sized by
+                reduction %, every Palo Alto read as the same 38% bar. */}
+            <div className="h-full rounded-full transition-all opacity-70" style={{ width: `${(s.monthlyUsd / maxSaving) * 100}%`, background: "var(--db-green)" }} />
           </div>
           <p className="text-xs text-muted-foreground font-mono-db">
             {fmtGb(s.gbPerDay)}/day in · {Math.round(s.reductionFactor * 100)}% reduced ·{" "}
@@ -637,8 +628,8 @@ function SavingsBySource({ perSource }: { perSource: SourceSaving[] }) {
         </button>
       ))}
       {perSource.length > SAVINGS_VISIBLE && (
-        <button onClick={() => navigate("/pipeline")} className="w-full px-4 py-2.5 text-xs text-primary hover:text-primary/80 inline-flex items-center justify-center gap-1">
-          All {perSource.length} sources on Pipeline
+        <button onClick={() => navigate("/savings")} className="w-full px-4 py-2.5 text-xs text-primary hover:text-primary/80 inline-flex items-center justify-center gap-1">
+          All {perSource.length} sources on Savings
           <ArrowRight className="w-3 h-3" aria-hidden="true" />
         </button>
       )}
@@ -953,7 +944,7 @@ export default function Dashboard() {
             <StaggerItem index={2}>
               <section>
                 <SectionHeading title="Alerts" count={alerts.length} />
-                <AlertsList alerts={alerts} onOpen={openAlert} />
+                <AlertsList alerts={alerts} onOpen={openAlert} hasDestinations={env.destinations.length > 0} />
               </section>
             </StaggerItem>
             <StaggerItem index={3}>

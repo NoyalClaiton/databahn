@@ -147,6 +147,13 @@ export function getCruzContext(
   const srcCount = health ? health.total : connected.filter((c) => c.kind === "source").length;
   const dstCount = health ? health.destTotal : connected.filter((c) => c.kind === "destination").length;
 
+  if (pathname.startsWith("/savings"))
+    return {
+      heading: "What Databahn is worth",
+      handled: ["Priced at each destination's list rate", "Every source's saving broken down by rule type"],
+      watching: "The fastest extra saving is usually rules that are still off. Each one shows its before/after first.",
+    };
+
   if (pathname.startsWith("/notifications"))
     return {
       heading: "Where alerts go",
@@ -205,6 +212,12 @@ export function getCruzContext(
           handled: ["No sources connected", "Search covers every source once one is connected"],
           watching: "Connect a source and this searches your real data.",
         };
+  if (pathname.startsWith("/graph") && srcCount === 0)
+    return {
+      heading: "Nothing to map yet",
+      handled: ["No sources connected", "Reef correlates entities once data arrives"],
+      watching: "Connect a source and you can trace users, devices and addresses across it here.",
+    };
   if (pathname.startsWith("/graph"))
     return {
       heading: "Reef is mapping entities",

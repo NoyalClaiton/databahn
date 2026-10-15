@@ -5,6 +5,7 @@ import { Switch } from "@/app/components/ui/switch";
 import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import { DRAWER_WIDTH } from "./PageLayout";
 import type { FlowNode, FlowEdge } from "./PipelineSankey";
+import { useEscape } from "@/app/lib/useEscape";
 
 /**
  * Explicit source-to-destination mapping, not just an emergent side effect of
@@ -33,6 +34,7 @@ export function RoutingPanel({
   focusSourceId?: string;
   focusDestId?: string;
 }) {
+  useEscape(onClose);
   const isRouted = (sourceId: string, destId: string) => edges.some((e) => e.sourceId === sourceId && e.destId === destId);
   const focusRef = useRef<HTMLDivElement>(null);
 

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { ColdStorageTarget } from "@/app/lib/SessionContext";
 import { DRAWER_WIDTH } from "./PageLayout";
 import type { FlowNode } from "./PipelineSankey";
+import { useEscape } from "@/app/lib/useEscape";
 
 /**
  * Cold storage isn't a source/destination pair like Sentinel or Splunk, it's
@@ -33,6 +34,7 @@ export function ColdStoragePanel({
   onAssign: (sourceId: string, targetId: string | null) => void;
   onClose: () => void;
 }) {
+  useEscape(onClose);
   const [label, setLabel] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [connecting, setConnecting] = useState(false);
@@ -41,6 +43,8 @@ export function ColdStoragePanel({
   // kind of irreversible-in-session action (any source still assigned to
   // it falls back to whatever's left), it deserves the same pause.
   const [pendingRemove, setPendingRemove] = useState<ColdStorageTarget | null>(null);
+  // The confirmation sits over the drawer: Escape closes it first.
+  useEscape(() => setPendingRemove(null), Boolean(pendingRemove));
 
   const submit = () => {
     if (!label.trim() || !endpoint.trim()) return;

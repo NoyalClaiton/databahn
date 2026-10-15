@@ -12,6 +12,7 @@ import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import { fmtAmount } from "./Funnel";
 import { RowActions, RowSelect, SelectAll, SelectionBar } from "./EntityActions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
+import { NoResults } from "./NoResults";
 
 export type HealthFilter = HealthState | "issues" | null;
 
@@ -431,15 +432,13 @@ export function SourceMetricsTable({
       </div>
 
       {rows.length === 0 && (
-        <div className="px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground">No sources match these filters.</p>
-          <button
-            onClick={() => onFiltersChange({ search: "", health: null, group: null, dest: null })}
-            className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80"
-          >
-            <X className="w-3 h-3" aria-hidden="true" /> Clear filters
-          </button>
-        </div>
+        <NoResults
+          what="sources"
+          query={filters.search}
+          hint="Try a different name, status or source type."
+          onClear={() => onFiltersChange({ search: "", health: null, group: null, dest: null })}
+          clearLabel="Clear filters"
+        />
       )}
 
       {rows.length > 0 && (

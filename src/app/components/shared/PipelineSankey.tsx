@@ -13,6 +13,7 @@ import { ContextualHelpTip } from "./ContextualHelpTip";
 import { useSession } from "@/app/lib/SessionContext";
 import type { HealthState } from "@/app/data/fleet";
 import { fmtCount, fmtSize } from "@/app/lib/environment";
+import { useEscape } from "@/app/lib/useEscape";
 
 /** Active rule count for a category, scoped to whichever sources are
  * actually connected and computed live from `rules`, not the frozen
@@ -451,13 +452,7 @@ export function PipelineSankey({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Close disconnect dialog on Escape
-  useEffect(() => {
-    if (!pendingDisconnect) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setPendingDisconnect(null); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [pendingDisconnect]);
+  useEscape(() => setPendingDisconnect(null), Boolean(pendingDisconnect));
 
   useEffect(() => {
     if (!containerRef.current) return;

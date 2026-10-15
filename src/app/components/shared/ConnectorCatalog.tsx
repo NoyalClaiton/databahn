@@ -9,6 +9,7 @@ import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import { StaggerItem } from "./PageLayout";
 import { ContextualHelpTip } from "./ContextualHelpTip";
 import { SearchInput } from "./SearchInput";
+import { NoResults } from "./NoResults";
 
 /**
  * Card anatomy follows the reference: a horizontal header (brand chip, name,
@@ -248,15 +249,17 @@ export function ConnectorCatalog({
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-10">
-          <p className="text-sm text-muted-foreground">No match for "{query}".</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Databahn ships 500+ integrations and builds new ones on request.
-          </p>
-          <button className="text-sm text-info underline underline-offset-2 mt-3">
-            Request this integration
-          </button>
-        </div>
+        <NoResults
+          what={kind === "source" ? "sources" : "destinations"}
+          query={query}
+          hint="Databahn ships 500+ integrations and builds new ones on request."
+          onClear={() => {
+            setQuery("");
+            setCategory(null);
+          }}
+        >
+          <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">Request this integration</button>
+        </NoResults>
       )}
 
       {filtered.length > 0 && (
@@ -293,8 +296,8 @@ function SummaryLines({ s, isSource }: { s: ConnectorSummary; isSource: boolean 
         <span className="text-muted-foreground font-mono-db">{fmtSize(s.gbPerDay)}/day</span>
       </p>
       <p className={s.stopped ? "text-destructive" : s.degraded ? "text-amber-400" : "text-success"}>
-        {s.stopped ? `${s.stopped} not sending` : s.degraded ? `${s.degraded} below normal` : "all sending"}
-        {s.stopped > 0 && s.degraded > 0 && <span className="text-amber-400"> · {s.degraded} below normal</span>}
+        {s.stopped ? `${s.stopped} stopped` : s.degraded ? `${s.degraded} degraded` : "all sending"}
+        {s.stopped > 0 && s.degraded > 0 && <span className="text-amber-400"> · {s.degraded} degraded</span>}
       </p>
     </>
   );

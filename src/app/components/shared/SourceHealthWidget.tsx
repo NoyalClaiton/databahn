@@ -158,7 +158,7 @@ export function SourceHealthWidget({
       )}
 
       {!compact && stopped.length > 0 && (
-        <Group title="Not sending" count={stopped.length} tone="text-destructive">
+        <Group title="Stopped" count={stopped.length} tone="text-destructive">
           {(showAllStopped ? stopped : stopped.slice(0, VISIBLE_ROWS)).map((s) => (
             <Row
               key={s.id}
@@ -178,7 +178,7 @@ export function SourceHealthWidget({
       )}
 
       {!compact && below.length > 0 && (
-        <Group title="Below normal" count={below.length} tone="text-amber-400">
+        <Group title="Degraded" count={below.length} tone="text-amber-400">
           {below.map((s) => (
             <Row
               key={s.id}

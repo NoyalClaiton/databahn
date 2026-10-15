@@ -6,6 +6,7 @@ import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { AskCruzButton } from "./CruzAssistant";
+import { useEscape } from "@/app/lib/useEscape";
 
 /** First field each connector needs, so the modal collects something real
  * rather than being a splash screen with a button. */
@@ -50,6 +51,7 @@ export function ConnectModal({
     status?: { label: string; tone: "good" | "warn" | "bad" | "info" };
   };
 }) {
+  useEscape(onClose, Boolean(connector));
   const [value, setValue] = useState("");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const field = connector ? FIRST_FIELD[connector.id] : undefined;
@@ -231,7 +233,7 @@ export function ConnectModal({
                   onClick={() => onContinue(connector.id)}
                   disabled={Boolean(field) && !isConnected && value.trim() === ""}
                 >
-                  {isConnected ? copy?.manageLabel ?? "Edit configuration" : "Continue to setup"}
+                  {isConnected ? copy?.manageLabel ?? "Edit connection" : "Continue to setup"}
                 </Button>
               </div>
             )}

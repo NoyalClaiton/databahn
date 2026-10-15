@@ -170,6 +170,10 @@
       <li><a href="#guidance"><span class="n">05</span>In-product guidance</a></li>
       <li><a href="#laws"><span class="n">06</span>UX grounding</a></li>
       <li><a href="#honest"><span class="n">07</span>What's simulated</a></li>
+      <li><a href="#round2"><span class="n">08</span>Round two: feedback</a></li>
+      <li><a href="#health"><span class="n">09</span>Health, alerts &amp; triage</a></li>
+      <li><a href="#outside"><span class="n">10</span>Notifications &amp; savings</a></li>
+      <li><a href="#consistency"><span class="n">11</span>Consistency rules</a></li>
     </ol>
   </nav>
 
@@ -223,7 +227,8 @@
     <section id="nav">
       <div class="section-head"><span class="idx">03</span><h2>Navigation & hierarchy</h2></div>
       <ul>
-        <li><strong>Persistent left rail</strong> (Dashboard, Sources, Destinations, Pipeline, Search, Graph) visible everywhere, collapsible without losing labels.</li>
+        <li><strong>Persistent left rail</strong> in four groups: Overview (Dashboard, Savings), Onboard (Sources, Destinations), Operate (Pipeline, Search, Graph, Rules) and Manage (Notifications). Visible everywhere, collapsible without losing labels.</li>
+        <li><strong>Header carries live state.</strong> A neutral status pill ("4 sources stopped · 3 degraded · 2 destinations") says how things are right now; the bell says what happened. Colour lives only in the small dots.</li>
         <li><strong>Dashboard orients, Pipeline works.</strong> Dashboard answers "what needs me now," its funnel preview is explicitly labeled so it's never mistaken for the interactive version.</li>
         <li><strong>Fixed wizard chrome.</strong> Same breadcrumb, step counter, and progress-rail position at every step, every connector.</li>
         <li><strong>One decision per screen.</strong> A step asking two unrelated things is a defect, not a shortcut.</li>
@@ -307,9 +312,85 @@
       <div class="section-head"><span class="idx">07</span><h2>What's simulated</h2></div>
       <div class="caveat">
         This is a client-side prototype with no backend, built to be demoable live. Dollar figures use a published-list-rate table, labeled as an estimate with the rate shown, never presented as a real invoice. Live-test timings are compressed from the plan's real figures so a walkthrough doesn't cost real dead air. The same disclosure appears in the product itself, not only here.
+        <br><br>
+        Round two adds a <strong>sample environment</strong> (Settings › Demo): 167 simulated sources and 3 destinations with realistic incidents, deterministic so every reload shows the same story. Search and Graph answer from sample data, and return "no results" for a query that names nothing in it. Notification deliveries, health checks and fixes are simulated. Disconnecting a sample source lasts for the session; "Edit connection" opens the regular connect wizard.
       </div>
     </section>
 
-    <footer>Design Rationale, Databahn onboarding redesign. Every figure in §04 and every "Built" note in §02 is checkable against the running prototype.</footer>
+
+    <section id="round2">
+      <div class="section-head"><span class="idx">08</span><h2>Round two: what the feedback changed</h2></div>
+      <p class="lede">The second round asked three things: show each source's data through the pipeline, rank what needs attention, and monitor health across 150 to 200 sources for two audiences. Databahn's answers reshaped the model more than the screens.</p>
+      <div class="law-table-wrap">
+        <table class="laws">
+          <thead><tr><th>What Databahn said</th><th>What changed</th></tr></thead>
+          <tbody>
+            <tr><td>Show received, processed, reduced and delivered, as events and size</td><td>One funnel, everywhere a source appears: totals for the selected range, with the current rate alongside</td></tr>
+            <tr><td>We rank alerts, not sources: data in or out affected is critical, processing that delays delivery is high</td><td>Per-source criticality removed; one severity scale from impact, alerts ordered by severity then duration</td></tr>
+            <tr><td>We track first and last event, events per minute, and connector health checks</td><td>Exactly the signals each triage shows; nothing claimed beyond them</td></tr>
+            <tr><td>We want initial triage and what to check, not a diagnosis</td><td>Likely causes ranked with evidence, including what's ruled out, then what to check</td></tr>
+            <tr><td>Destinations reject data often: type mismatches, throttling, rotated credentials</td><td>Destinations monitored, triaged and alerted on exactly like sources</td></tr>
+            <tr><td>Both executives and data engineers use the dashboard</td><td>An Executive / Data engineer lens: same numbers, different emphasis</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="health">
+      <div class="section-head"><span class="idx">09</span><h2>Health, alerts &amp; triage</h2></div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">06</span><h3>Six states, so planned work never cries wolf</h3></div>
+        <p>Stopped, Degraded, Recovering, Healthy, Paused and Learning. Paused covers maintenance; Learning covers a new source whose normal volume isn't known yet. Without them, an upgrade or a new connection raises a false alarm, and alarms that cry wolf get ignored the day they matter.</p>
+        <p class="built"><strong>Built:</strong> one name per state on every screen, explained on hover wherever a badge or dot appears. Recovering is watched for 30 minutes before it's trusted. Pause asks how long and why, and any pause can be resumed.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">07</span><h3>One alert per problem, not per source</h3></div>
+        <p>A syslog listener that goes down takes two branch firewalls with it. That's one problem with one fix, so it's one alert, and one restart resolves both.</p>
+        <p class="built"><strong>Built:</strong> the Alerts list is the work list (severity, likely cause, owner); Source health is the state view (one compact row per source). They answer different questions, so they no longer repeat each other.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">08</span><h3>Triage leads with what to do</h3></div>
+        <p>The detail drawer opens on three lines: the likely cause, the action, the impact. Detail sits a level down in Triage, Data flow and Activity tabs, the same three in every drawer.</p>
+        <p class="built"><strong>Built:</strong> a one-click action exists only where Databahn can act on its own side (restart its listener, update its parser, store a new credential). Anything on the customer's device is a check they run, then a health check confirms data is arriving again. Links inside the drawer keep a Back path, on the tab you left.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">09</span><h3>Ownership is a person, and work happens in bulk</h3></div>
+        <p>"I'm on it", assign to someone (owning team first), take over without locking anyone out. At 150+ sources a maintenance window covers a whole site, so actions work on one row or a selection.</p>
+        <p class="built"><strong>Built:</strong> one action menu for a row, a multi-select and the drawer: pause, resume, assign, health check, routing, rules, edit connection, disconnect. Items that don't fit the selection stay visible, disabled, and say why.</p>
+      </div>
+    </section>
+
+    <section id="outside">
+      <div class="section-head"><span class="idx">10</span><h2>Notifications &amp; savings</h2></div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">10</span><h3>Alerts reach people who aren't looking</h3></div>
+        <p>A source that stops at 2am shouldn't wait for someone to open Databahn. Called "Notifications", not "Integrations", because in Databahn integrations are the sources and destinations data flows through.</p>
+        <p class="built"><strong>Built:</strong> Slack, Teams, PagerDuty, Opsgenie, email and webhook, connected through the same wizard as every source. Routing by severity, quiet hours that never hold critical or high, and alerts that can be claimed from chat.</p>
+      </div>
+
+      <div class="decision">
+        <div class="decision-head"><span class="decision-num">11</span><h3>Cost has its own page, out of the engineer's way</h3></div>
+        <p>Executives and FinOps ask what Databahn is worth; engineers ask whether data is flowing. Savings gets its own page so Pipeline and the source drawer stay operational.</p>
+        <p class="built"><strong>Built:</strong> saved over the range, the bill with and without Databahn, savings by destination and by source, and what turning on the remaining rules would add. The reduction bar is the same picture on Savings (in dollars) and in a source's Data flow (in data), split by rule type with one colour per type, so the same 38% is recognisable in both places.</p>
+      </div>
+    </section>
+
+    <section id="consistency">
+      <div class="section-head"><span class="idx">11</span><h2>Consistency rules</h2></div>
+      <ul>
+        <li><strong>Colour signals status, nothing else.</strong> Dots, badges and a thin left edge carry it; labels, numbers and frames stay neutral.</li>
+        <li><strong>One type scale.</strong> Page title, large figure, title, body, secondary, badge. No one-off sizes.</li>
+        <li><strong>One name for one thing.</strong> A state, a tab or an action is called the same on every screen.</li>
+        <li><strong>One shape per state.</strong> Empty pages keep their header above the empty state; every search and filter has the same "no results" with a way out; every error says what failed and offers a next step.</li>
+        <li><strong>Every overlay behaves the same.</strong> Drawers open beside Cruz rather than under it, Escape closes the topmost overlay first, and new pages open at the top.</li>
+      </ul>
+    </section>
+
+    <footer>Design Rationale, Databahn onboarding redesign. Every figure in §04 and every "Built" note in §02, §09 and §10 is checkable against the running prototype.</footer>
   </main>
 </div>

@@ -19,7 +19,7 @@ export const HEALTH_META: Record<
     text: "text-destructive",
     chip: "border-destructive/40 bg-destructive/10 text-destructive",
     bar: "var(--db-red)",
-    description: "Not sending: no events for longer than this source's normal gap. Raises a critical alert.",
+    description: "Stopped: no events for longer than this source's normal gap. Raises a critical alert.",
   },
   degraded: {
     label: "Degraded",
@@ -27,7 +27,7 @@ export const HEALTH_META: Record<
     text: "text-amber-400",
     chip: "border-amber-500/40 bg-amber-500/10 text-amber-400",
     bar: "#f59e0b",
-    description: "Below normal: data still arrives, but volume is low, events fail to parse, or delivery is falling behind.",
+    description: "Degraded: data still arrives, but volume is low, events fail to parse, or delivery is falling behind.",
   },
   recovering: {
     label: "Recovering",

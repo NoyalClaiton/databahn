@@ -20,7 +20,9 @@ import GraphView from "@/app/pages/GraphView";
 import RulesLibrary from "@/app/pages/RulesLibrary";
 import GenericConnectorWizard from "@/app/pages/GenericConnectorWizard";
 import Notifications from "@/app/pages/Notifications";
+import Savings from "@/app/pages/Savings";
 import NotificationConnect from "@/app/pages/NotificationConnect";
+import NotFound from "@/app/pages/NotFound";
 
 /** AnimatePresence keyed on pathname so every route change slides rather than
  * hard-swapping (see PageTransition). */
@@ -43,7 +45,9 @@ function AnimatedRoutes() {
         <Route path="/graph" element={<PageTransition><GraphView /></PageTransition>} />
         <Route path="/rules" element={<PageTransition><RulesLibrary /></PageTransition>} />
         <Route path="/notifications" element={<PageTransition><Notifications /></PageTransition>} />
+        <Route path="/savings" element={<PageTransition><Savings /></PageTransition>} />
         <Route path="/notifications/connect/:type" element={<PageTransition><NotificationConnect /></PageTransition>} />
+        <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
       </Routes>
     </AnimatePresence>
   );

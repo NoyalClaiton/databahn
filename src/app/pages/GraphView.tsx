@@ -4,10 +4,12 @@ import { Database } from "lucide-react";
 import { PageHeader } from "@/app/components/shared/PageLayout";
 import { ReefGraph } from "@/app/components/shared/ReefGraph";
 import { SearchInput } from "@/app/components/shared/SearchInput";
-import { ENTITY_INDEX, subgraphFrom } from "@/app/data/graphData";
+import { ENTITY_INDEX, REEF_NODES, subgraphFrom } from "@/app/data/graphData";
 import { EmptyState } from "@/app/components/shared/StateViews";
 import { useEnvironment } from "@/app/lib/environment";
 import { useSession } from "@/app/lib/SessionContext";
+import { NoResults } from "@/app/components/shared/NoResults";
+import { matchesQuery } from "@/app/lib/matchQuery";
 
 /** Concrete investigations to start from, mirroring the Search page so the
  * cold start is solved the same way in both places. */
@@ -44,6 +46,10 @@ export default function GraphView() {
   if (sourceCount === 0) {
     return (
       <div className="w-full max-w-[1180px] mx-auto">
+        <PageHeader
+          title="See how it all connects"
+          subtitle="Reef correlates entities across your connected sources, including data never evaluated by detection rules."
+        />
         <EmptyState
           icon={Database}
           title="No sources connected yet"
@@ -106,6 +112,33 @@ export default function GraphView() {
           </p>
         </div>
       ) : (
+        !seedEntityId && !REEF_NODES.some((n) => matchesQuery(query, `${n.label} ${n.sublabel ?? ""}`)) ? (
+          // A query that names no user, host or address in the data gets the
+          // shared no-results state, not the same graph every time.
+          <div className="rounded border border-border glass-card">
+            <NoResults
+              what="entities"
+              query={query}
+              hint="Name a user, host, IP address or account that appears in your data, or start from one of these:"
+              onClear={() => {
+                setQuery("");
+                setAsked(false);
+              }}
+            >
+              <div className="flex flex-wrap justify-center gap-1.5 max-w-xl">
+                {EXAMPLE_INVESTIGATIONS.map((ex) => (
+                  <button
+                    key={ex.q}
+                    onClick={() => runQuery(ex.q)}
+                    className="text-xs text-left text-info bg-info/8 hover:bg-info/15 rounded-full px-2.5 py-1 transition-colors"
+                  >
+                    {ex.q}
+                  </button>
+                ))}
+              </div>
+            </NoResults>
+          </div>
+        ) : (
         <>
           <p className="text-xs text-muted-foreground mb-3">
             Investigating <span className="text-foreground font-medium">{query}</span>
@@ -121,6 +154,7 @@ export default function GraphView() {
             initialFocusIndex={graphSubset.focusIndex}
           />
         </>
+        )
       )}
     </div>
   );

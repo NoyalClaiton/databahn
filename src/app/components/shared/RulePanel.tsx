@@ -6,12 +6,15 @@ import { Switch } from "@/app/components/ui/switch";
 import { groupByCategory, liveCategoryStats, RULE_LIBRARY_TOTAL, type ReductionRule } from "@/app/data/rules";
 import { DRAWER_WIDTH } from "./PageLayout";
 import { CONNECTORS } from "@/app/data/connectors";
+import { useEscape } from "@/app/lib/useEscape";
 
 /** The drawer is the quick glimpse, not the place to scroll through 300+
  * rows, that's what the full rules page is for. Capped per category, with
  * an explicit "N more" so it's obvious the list keeps going, not that this
  * is genuinely everything. */
 const DRAWER_PREVIEW_LIMIT = 6;
+
+const usdShort = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
 /**
  * Principle 9, the actual review surface, never a blocking gate. Grouped by
@@ -27,6 +30,7 @@ export function RulePanel({
   onToggle,
   onClose,
   focusRuleId,
+  savings,
 }: {
   rules: ReductionRule[];
   scopeLabel: string;
@@ -42,8 +46,14 @@ export function RulePanel({
    * no indication which one is new isn't actually an answer to "where do I
    * go next." */
   focusRuleId?: string;
+  /** Opened from Savings: each rule shows what it's worth, the list is split
+   * into what's applied and what's off, and nothing is capped. */
+  savings?: { valueOf: (ruleId: string) => number; initialView: "applied" | "off" };
 }) {
   const navigate = useNavigate();
+  useEscape(onClose);
+  const [view, setView]
+ = useState<"applied" | "off">(savings?.initialView ?? "applied");
   const stats = liveCategoryStats(rules, sourceId);
   // Every category the current scope contains, so the drawer can switch
   // between them in place rather than sending the user back to the pipeline
@@ -55,8 +65,15 @@ export function RulePanel({
   useEffect(() => {
     if (focusRuleId) focusRef.current?.scrollIntoView({ block: "center" });
   }, [focusRuleId]);
-  const scoped = active ? rules.filter((r) => r.category === active) : rules;
-  const grouped = groupByCategory(scoped);
+  const byCategory = active ? rules.filter((r) => r.category === active) : rules;
+  const scoped = savings ? byCategory.filter((r) => (view === "applied" ? r.enabled : !r.enabled)) : byCategory;
+  const grouped = groupByCategory(
+    savings ? [...scoped].sort((a, b) => savings.valueOf(b.id) - savings.valueOf(a.id)) : scoped,
+  );
+  const savedUsd = savings ? rules.filter((r) => r.enabled).reduce((a, r) => a + savings.valueOf(r.id), 0) : 0;
+  const availableUsd = savings ? rules.filter((r) => !r.enabled).reduce((a, r) => a + savings.valueOf(r.id), 0) : 0;
+  const onCount = rules.filter((r) => r.enabled).length;
+  const offCount = rules.length - onCount;
   const totals = stats.reduce(
     (a, c) => ({ applicable: a.applicable + c.applicable, active: a.active + c.active }),
     { applicable: 0, active: 0 },
@@ -98,10 +115,24 @@ export function RulePanel({
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
                 <p className="text-sm font-medium text-foreground">Reduction rules</p>
-                <p className="text-xs text-muted-foreground">
-                  {active ?? scopeLabel} · <span className="font-mono-db">{active ? statFor(active).active : totals.active}</span> of{" "}
-                  <span className="font-mono-db">{active ? statFor(active).applicable : totals.applicable}</span> applicable active
-                </p>
+                {savings ? (
+                  <p className="text-xs text-muted-foreground">
+                    {scopeLabel} · saving <span className="font-mono-db text-foreground">{usdShort(savedUsd)}/mo</span> from{" "}
+                    <span className="font-mono-db">{onCount}</span> rules
+                    {offCount > 0 && (
+                      <>
+                        {" "}
+                        · <span className="font-mono-db text-success">~{usdShort(availableUsd)}/mo</span> more from{" "}
+                        <span className="font-mono-db">{offCount}</span> off
+                      </>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {active ?? scopeLabel} · <span className="font-mono-db">{active ? statFor(active).active : totals.active}</span> of{" "}
+                    <span className="font-mono-db">{active ? statFor(active).applicable : totals.applicable}</span> applicable active
+                  </p>
+                )}
               </div>
               <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring rounded">
                 <X className="w-4 h-4" />
@@ -113,9 +144,28 @@ export function RulePanel({
                 category so a 300+ rule scope doesn't turn into an endless
                 scroll in a narrow drawer. */}
             <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-border bg-muted/10">
-              <p className="text-xs text-muted-foreground/70">
-                A quick preview of your active rules, capped per category below.
-              </p>
+              {savings ? (
+                // The app's quiet toggle (range, per minute / total).
+                <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-background/40 p-0.5" role="group" aria-label="Show rules">
+                  {(
+                    [
+                      ["applied", `Applied (${onCount})`],
+                      ["off", `Off (${offCount})`],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button
+                      key={v}
+                      onClick={() => setView(v)}
+                      aria-pressed={view === v}
+                      className={`text-xs px-2 py-0.5 rounded transition-colors ${view === v ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground/70">A quick preview of your active rules, capped per category below.</p>
+              )}
               <button
                 onClick={() => navigate("/rules", { state: { sourceId, category: active ?? undefined } })}
                 className="text-xs font-medium text-primary hover:text-primary/80 underline underline-offset-2 inline-flex items-center gap-1 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
@@ -159,7 +209,7 @@ export function RulePanel({
               // focus/scroll feature, so it always gets a seat even past the
               // preview limit.
               const focusInCategory = categoryRules.find((r) => r.id === focusRuleId);
-              const preview = categoryRules.slice(0, DRAWER_PREVIEW_LIMIT);
+              const preview = savings ? categoryRules : categoryRules.slice(0, DRAWER_PREVIEW_LIMIT);
               const shown =
                 focusInCategory && !preview.includes(focusInCategory) ? [...preview, focusInCategory] : preview;
               const hiddenCount = categoryRules.length - shown.length;
@@ -179,6 +229,7 @@ export function RulePanel({
                         onToggle={() => onToggle(rule.id)}
                         focusRef={rule.id === focusRuleId ? focusRef : undefined}
                         isFocused={rule.id === focusRuleId}
+                        value={savings ? savings.valueOf(rule.id) : undefined}
                       />
                     ))}
                   </div>
@@ -194,7 +245,11 @@ export function RulePanel({
                 </div>
               );
             })}
-            {scoped.length === 0 && <p className="text-sm text-muted-foreground">No rules applied in this scope.</p>}
+            {scoped.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                {savings && view === "off" ? "Every applicable rule is on." : "No rules applied in this scope."}
+              </p>
+            )}
 
             <p className="text-xs text-muted-foreground/70 border-t border-border pt-4">
               Databahn maintains {RULE_LIBRARY_TOTAL}+ security-specific reduction rules,{" "}
@@ -212,11 +267,14 @@ export function RuleRow({
   onToggle,
   focusRef,
   isFocused,
+  value,
 }: {
   rule: ReductionRule;
   onToggle: () => void;
-  focusRef?: React.RefObject<HTMLDivElement | null>;
+  focusRef?: React.Ref<HTMLDivElement>;
   isFocused?: boolean;
+  /** $/mo this rule saves (on) or would add (off), when opened from Savings. */
+  value?: number;
 }) {
   // Most rules apply to exactly one source, showing that back would just be
   // noise, this only earns its place once a rule genuinely spans more than
@@ -248,7 +306,15 @@ export function RuleRow({
             <p className="text-xs text-amber-400 mt-1">Off until you review and turn it on.</p>
           )}
         </div>
-        <Switch checked={rule.enabled} onCheckedChange={onToggle} aria-label={`Toggle ${rule.name}`} />
+        <div className="flex items-center gap-3 shrink-0">
+          {value !== undefined && (
+            <span className={`text-xs font-mono-db ${rule.enabled ? "text-foreground" : "text-success"}`} title={rule.enabled ? "Saving per month" : "Would save per month"}>
+              {rule.enabled ? "" : "+"}
+              {usdShort(value)}/mo
+            </span>
+          )}
+          <Switch checked={rule.enabled} onCheckedChange={onToggle} aria-label={`Toggle ${rule.name}`} />
+        </div>
       </div>
       <div className="mt-2 grid grid-cols-1 gap-1.5 font-mono-db text-xs">
         {/* Bare before/after lines read as broken text, not a diff, unless

@@ -23,8 +23,8 @@ function sampleManageCopy(s: ConnectorSummary | undefined, isSource: boolean) {
     configuration: (isSource
       ? [
           ["Connected", `${s.count} source${s.count === 1 ? "" : "s"}`],
-          ["Not sending", String(s.stopped)],
-          ["Below normal", String(s.degraded)],
+          ["Stopped", String(s.stopped)],
+          ["Degraded", String(s.degraded)],
           ["Volume", `${fmtSize(s.gbPerDay)}/day`],
         ]
       : [
@@ -34,9 +34,9 @@ function sampleManageCopy(s: ConnectorSummary | undefined, isSource: boolean) {
         ]) as [string, string][],
     manageLabel: "View in Pipeline",
     status: (s.stopped
-      ? { label: isSource ? `${s.stopped} not sending` : "Not accepting", tone: "bad" }
+      ? { label: isSource ? `${s.stopped} stopped` : "Not accepting", tone: "bad" }
       : s.degraded
-        ? { label: isSource ? `${s.degraded} below normal` : "Rejecting some", tone: "warn" }
+        ? { label: isSource ? `${s.degraded} degraded` : "Rejecting some", tone: "warn" }
         : s.state === "recovering"
           ? { label: "Recovering", tone: "info" }
           : { label: "Healthy", tone: "good" }) as { label: string; tone: "good" | "warn" | "bad" | "info" },

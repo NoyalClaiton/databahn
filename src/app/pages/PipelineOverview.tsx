@@ -83,13 +83,21 @@ export default function PipelineOverview() {
   };
 
   if (env.sources.length === 0) {
+    // Same frame as every other empty page: the page's own header, then the
+    // empty state, so the user still knows where they are.
     return (
-      <EmptyState
-        icon={ShieldCheck}
-        title="No sources connected yet"
-        description="Connect a source to see it flow through Databahn to a destination."
-        action={{ label: "Connect a source", onClick: () => navigate("/sources") }}
-      />
+      <div className="w-full max-w-[1180px] mx-auto">
+        <PageHeader
+          title="Pipeline overview"
+          subtitle="Everything flowing from your sources, through Cruz, out to your destinations."
+        />
+        <EmptyState
+          icon={ShieldCheck}
+          title="No sources connected yet"
+          description="Connect a source to see it flow through Databahn to a destination."
+          action={{ label: "Connect a source", onClick: () => navigate("/sources") }}
+        />
+      </div>
     );
   }
 

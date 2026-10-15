@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   X, UserCheck, Bell, CheckCircle2, AlertTriangle, PauseCircle, KeyRound, Info,
-  ArrowRight, MessageCircleQuestion, Clock, Server, Link2, MoreHorizontal, ChevronDown, ChevronRight, ListFilter, UserX,
+  ArrowRight, MessageCircleQuestion, Clock, Server, Link2, MoreHorizontal, ChevronDown, ChevronRight, ChevronLeft, ListFilter, UserX,
 } from "lucide-react";
 import { useSession } from "@/app/lib/SessionContext";
 import { useCruz } from "@/app/lib/CruzContext";
@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/environment";
 import { SEVERITY_FOR_AREA, type Incident, type LikelyCause, type HealthCheck, type Severity } from "@/app/data/fleet";
 import { whereAlertsGo } from "@/app/lib/notifications";
+import { reductionSplit } from "@/app/lib/savings";
 import { HEALTH_META, HealthBadge, SeverityBadge } from "./HealthBadge";
 import { Sparkline } from "./Sparkline";
 import { ContextualHelpTip } from "./ContextualHelpTip";
@@ -21,6 +22,7 @@ import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import { FunnelBars } from "./Funnel";
 import { DRAWER_WIDTH } from "./PageLayout";
 import { PauseDialog } from "./PauseDialog";
+import { useEscape } from "@/app/lib/useEscape";
 import { useEntityActions } from "./EntityActions";
 import { Button } from "@/app/components/ui/button";
 import {
@@ -499,6 +501,7 @@ function OwnerControl({
 
 function Shell({
   title,
+  kind,
   logoId,
   color,
   badges,
@@ -508,10 +511,14 @@ function Shell({
   menu,
   headerAction,
   actions,
+  back,
   onClose,
   children,
 }: {
   title: string;
+  /** Said in the header, so moving from a source to a destination is never
+   * mistaken for the same drawer showing something else. */
+  kind: "source" | "destination";
   logoId: string;
   color: string;
   badges: ReactNode;
@@ -526,14 +533,14 @@ function Shell({
   headerAction?: ReactNode;
   /** The shared action menu (same as the Pipeline tables'), after `menu`. */
   actions?: ReactNode;
+  /** Opened from inside another drawer: the way back to it. */
+  back?: { label: string; onBack: () => void };
   onClose: () => void;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  // Shared Escape: a dialog opened from the drawer (Pause, Disconnect)
+  // closes first, the drawer on the next press.
+  useEscape(onClose);
 
   return (
     <AnimatePresence>
@@ -556,12 +563,22 @@ function Shell({
           aria-label={`${title} details`}
         >
           <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-4">
+            {back && (
+              <button
+                onClick={back.onBack}
+                className="mb-3 -ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-w-full"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">Back to {back.label}</span>
+              </button>
+            )}
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shrink-0" style={{ color: chipSafeColor(color) }}>
                   {hasVendorLogo(logoId) ? <VendorLogo connectorId={logoId} size={20} /> : <span className="text-xs font-bold">{title.slice(0, 2).toUpperCase()}</span>}
                 </div>
                 <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{kind === "source" ? "Source" : "Destination"}</p>
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-base font-semibold text-foreground truncate">{title}</p>
                     {badges}
@@ -661,10 +678,26 @@ function DrawerTabs({ tabs, value, onChange }: { tabs: { value: TabKey; label: s
 /* Source                                                               */
 /* ------------------------------------------------------------------ */
 
-function SourcePanel({ s, range, onClose, onOpen }: { s: SourceView; range: string; onClose: () => void; onOpen: (t: AlertTarget) => void }) {
+function SourcePanel({
+  s,
+  range,
+  onClose,
+  onOpen,
+  initialTab,
+  back,
+  onTabChange,
+}: {
+  s: SourceView;
+  range: string;
+  onClose: () => void;
+  onOpen: (t: AlertTarget) => void;
+  initialTab?: TabKey;
+  back?: { label: string; onBack: () => void };
+  onTabChange?: (t: TabKey) => void;
+}) {
   const navigate = useNavigate();
   const env = useEnvironment();
-  const { updateSourceStatus } = useSession();
+  const { updateSourceStatus, rules } = useSession();
   const { open: openCruz } = useCruz();
   const [riskDone, setRiskDone] = useState(false);
   const [pausing, setPausing] = useState(false);
@@ -675,7 +708,7 @@ function SourcePanel({ s, range, onClose, onOpen }: { s: SourceView; range: stri
   const meta = HEALTH_META[s.state];
   const inc = s.incident;
   const problem = s.state === "stopped" || s.state === "degraded";
-  const [tab, setTab] = useState<TabKey>(problem ? "triage" : "flow");
+  const [tab, setTab] = useState<TabKey>(initialTab ?? (problem ? "triage" : "flow"));
   const siblings = inc?.groupId ? env.sources.filter((m) => m.id !== s.id && m.incident?.groupId === inc.groupId) : [];
   const alertedMin = inc?.timeline.find((t) => /alert sent/i.test(t.text))?.minutesAgo;
   const funnel = funnelFor(s, range, "total", env.destinations);
@@ -711,10 +744,12 @@ function SourcePanel({ s, range, onClose, onOpen }: { s: SourceView; range: stri
 
   return (
     <Shell
+      kind="source"
       title={s.name}
       logoId={s.connectorId}
       color={s.color}
       onClose={onClose}
+      back={back}
       badges={
         <>
           <HealthBadge state={s.state} size="xs" />
@@ -862,7 +897,14 @@ function SourcePanel({ s, range, onClose, onOpen }: { s: SourceView; range: stri
       </div>
 
       <div className="mb-5">
-        <DrawerTabs tabs={tabs} value={tabs.some((t) => t.value === tab) ? tab : "flow"} onChange={setTab} />
+        <DrawerTabs
+          tabs={tabs}
+          value={tabs.some((t) => t.value === tab) ? tab : "flow"}
+          onChange={(t) => {
+            setTab(t);
+            onTabChange?.(t);
+          }}
+        />
       </div>
 
       {tab === "triage" && inc && problem && (
@@ -898,7 +940,13 @@ function SourcePanel({ s, range, onClose, onOpen }: { s: SourceView; range: stri
             title={`Last ${range}`}
             aside={<span className="text-xs text-muted-foreground font-mono-db">≈{fmtCount(s.epm.received)}/min received now</span>}
           >
-            <FunnelBars funnel={funnel} mode="total" />
+            <FunnelBars
+              funnel={funnel}
+              mode="total"
+              reducedSplit={reductionSplit(s.connectorId, s.reduction, rules)
+                .filter((c) => c.share > 0)
+                .map((c) => ({ label: c.category, share: c.share }))}
+            />
           </Block>
           <Block
             title={`Received · ${range}`}
@@ -955,14 +1003,28 @@ function SourcePanel({ s, range, onClose, onOpen }: { s: SourceView; range: stri
 /* Destination                                                          */
 /* ------------------------------------------------------------------ */
 
-function DestinationPanel({ d, onClose, onOpen }: { d: DestinationView; onClose: () => void; onOpen: (t: AlertTarget) => void }) {
+function DestinationPanel({
+  d,
+  onClose,
+  onOpen,
+  initialTab,
+  back,
+  onTabChange,
+}: {
+  d: DestinationView;
+  onClose: () => void;
+  onOpen: (t: AlertTarget) => void;
+  initialTab?: TabKey;
+  back?: { label: string; onBack: () => void };
+  onTabChange?: (t: TabKey) => void;
+}) {
   const env = useEnvironment();
   const navigate = useNavigate();
   const { updateSourceStatus } = useSession();
   const { open: openCruz } = useCruz();
   const inc = d.incident;
   const problem = d.state === "stopped" || d.state === "degraded";
-  const [tab, setTab] = useState<TabKey>(problem ? "triage" : "flow");
+  const [tab, setTab] = useState<TabKey>(initialTab ?? (problem ? "triage" : "flow"));
   const [justResolved, setJustResolved] = useState(false);
   const key = `dest:${d.id}`;
   const destActions = useEntityActions([{ kind: "destination", d }]);
@@ -972,23 +1034,25 @@ function DestinationPanel({ d, onClose, onOpen }: { d: DestinationView; onClose:
 
   const tabs: { value: TabKey; label: string }[] = [
     ...(problem && inc ? [{ value: "triage" as const, label: "Triage" }] : []),
-    { value: "flow", label: "Delivery" },
+    { value: "flow", label: "Data flow" },
     { value: "activity", label: "Activity" },
   ];
 
   return (
     <Shell
+      kind="destination"
       title={d.name}
       logoId={d.id}
       color={d.color}
       onClose={onClose}
+      back={back}
       badges={
         <>
           <HealthBadge state={d.state} size="xs" />
           {d.severity && problem && <SeverityBadge severity={d.severity} />}
         </>
       }
-      meta={`Destination · ${d.sourceIds.length} source${d.sourceIds.length === 1 ? "" : "s"} routed`}
+      meta={`${d.sourceIds.length} source${d.sourceIds.length === 1 ? "" : "s"} routed`}
       statusLine={
         problem && inc ? (
           <p className={HEALTH_META[d.state].text}>
@@ -1042,7 +1106,14 @@ function DestinationPanel({ d, onClose, onOpen }: { d: DestinationView; onClose:
       </div>
 
       <div className="mb-5">
-        <DrawerTabs tabs={tabs} value={tabs.some((t) => t.value === tab) ? tab : "flow"} onChange={setTab} />
+        <DrawerTabs
+          tabs={tabs}
+          value={tabs.some((t) => t.value === tab) ? tab : "flow"}
+          onChange={(t) => {
+            setTab(t);
+            onTabChange?.(t);
+          }}
+        />
       </div>
 
       {tab === "triage" && inc && problem && (
@@ -1133,18 +1204,41 @@ export function DetailDrawer({
   target,
   range,
   onClose,
-  onOpen,
+  initialTab,
 }: {
   target: AlertTarget;
   range: string;
   onClose: () => void;
-  onOpen: (t: AlertTarget) => void;
+  /** Kept for callers; links inside the drawer are handled here now, as a
+   * stack, so there's always a way back. */
+  onOpen?: (t: AlertTarget) => void;
+  /** Opened from somewhere about volume or cost (Savings), not a problem:
+   * start on Data flow rather than Triage. */
+  initialTab?: "triage" | "flow" | "activity";
 }) {
   const env = useEnvironment();
-  if (target.kind === "source") {
-    const s = env.sources.find((x) => x.id === target.id);
-    return s ? <SourcePanel key={s.id} s={s} range={range} onClose={onClose} onOpen={onOpen} /> : null;
+  // Following a link inside the drawer (a destination's triage, a related
+  // source) stacks the new view; Back returns to the previous one on the
+  // tab it was left on. A new target from the page starts a fresh stack.
+  const [stack, setStack] = useState<{ target: AlertTarget; tab?: TabKey }[]>([{ target, tab: initialTab }]);
+  const [origin, setOrigin] = useState(target);
+  if (origin.kind !== target.kind || origin.id !== target.id) {
+    setOrigin(target);
+    setStack([{ target, tab: initialTab }]);
   }
-  const d = env.destinations.find((x) => x.id === target.id);
-  return d ? <DestinationPanel key={d.id} d={d} onClose={onClose} onOpen={onOpen} /> : null;
+  const top = stack[stack.length - 1];
+  const prev = stack.length > 1 ? stack[stack.length - 2] : null;
+  const push = (t: AlertTarget) => setStack((st) => [...st, { target: t }]);
+  const back = prev ? { label: prev.target.name, onBack: () => setStack((st) => st.slice(0, -1)) } : undefined;
+  const rememberTab = (t: TabKey) => setStack((st) => st.map((e, i) => (i === st.length - 1 ? { ...e, tab: t } : e)));
+  const key = `${top.target.kind}:${top.target.id}:${stack.length}`;
+
+  if (top.target.kind === "source") {
+    const s = env.sources.find((x) => x.id === top.target.id);
+    return s ? (
+      <SourcePanel key={key} s={s} range={range} onClose={onClose} onOpen={push} initialTab={top.tab} back={back} onTabChange={rememberTab} />
+    ) : null;
+  }
+  const d = env.destinations.find((x) => x.id === top.target.id);
+  return d ? <DestinationPanel key={key} d={d} onClose={onClose} onOpen={push} initialTab={top.tab} back={back} onTabChange={rememberTab} /> : null;
 }

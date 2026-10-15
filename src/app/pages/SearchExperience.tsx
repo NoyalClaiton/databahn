@@ -14,6 +14,9 @@ import { Checkbox } from "@/app/components/ui/checkbox";
 import { Button } from "@/app/components/ui/button";
 import { useSession } from "@/app/lib/SessionContext";
 import { useEnvironment, clockAt } from "@/app/lib/environment";
+import { useEscape } from "@/app/lib/useEscape";
+import { matchesQuery } from "@/app/lib/matchQuery";
+import { NoResults } from "@/app/components/shared/NoResults";
 
 /** "Evaluated" has to hold for whichever destination actually saw this event,
  * not just whichever one or two happened to get named in a conditional.
@@ -256,6 +259,7 @@ function FlagForDetectionModal({
   onClose: () => void;
   onSubmitted: (ruleId: string) => void;
 }) {
+  useEscape(onClose);
   const { addRule } = useSession();
   // One entry per connected source type, from the environment (sample
   // included). An exclusion applies to a type of source, not one instance.
@@ -386,6 +390,7 @@ export default function SearchExperience() {
   if (sourceCount === 0) {
     return (
       <div className="w-full max-w-[1180px] mx-auto">
+        <PageHeader title="Ask anything, anywhere" subtitle="Search across every connected source, including data filtered through active rules." />
         <EmptyState
           icon={Database}
           title="No sources connected yet"
@@ -433,7 +438,12 @@ export default function SearchExperience() {
       if (currentIdx >= sourceNames.length) {
         clearInterval(interval);
         setProgress((p) => p.map((s) => ({ ...s, state: "done" as const })));
-        setResults(coldStorageConnected ? MOCK_RESULTS : MOCK_RESULTS.filter((r) => r.provenance !== "cold-storage"));
+        // Sample results only come back for a query that matches something in
+        // them, so a query about nothing in the data reaches the no-results
+        // state instead of the same eight results every time.
+        const pool = coldStorageConnected ? MOCK_RESULTS : MOCK_RESULTS.filter((r) => r.provenance !== "cold-storage");
+        const relevant = MOCK_RESULTS.some((r) => matchesQuery(q, `${r.summary} ${r.raw} ${r.source} ${Object.values(r.parsed).join(" ")}`));
+        setResults(relevant ? pool : []);
         setStatus("done");
         return;
       }
@@ -490,7 +500,36 @@ export default function SearchExperience() {
         </div>
       )}
 
-      {status === "done" && hiddenColdStorageCount > 0 && (
+      {status === "done" && results.length === 0 && (
+        <div className="rounded border border-border glass-card">
+          <NoResults
+            what="events"
+            query={query}
+            hint="Searched every connected source over the last 24 hours. Try an address, user, host or event type, or one of these:"
+            onClear={() => {
+              setQuery("");
+              setStatus("idle");
+            }}
+          >
+            <div className="flex flex-wrap justify-center gap-1.5 max-w-xl">
+              {EXAMPLE_QUERIES.map((ex) => (
+                <button
+                  key={ex.q}
+                  onClick={() => {
+                    setQuery(ex.q);
+                    runSearch(ex.q);
+                  }}
+                  className="text-xs text-left text-info bg-info/8 hover:bg-info/15 rounded-full px-2.5 py-1 transition-colors"
+                >
+                  {ex.q}
+                </button>
+              ))}
+            </div>
+          </NoResults>
+        </div>
+      )}
+
+      {status === "done" && results.length > 0 && hiddenColdStorageCount > 0 && (
         <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-lg border border-border bg-card shadow-[inset_2px_0_0_#f59e0b]">
           <p className="text-xs text-muted-foreground">
             {hiddenColdStorageCount} filtered event{hiddenColdStorageCount === 1 ? "" : "s"} not shown, no cold storage

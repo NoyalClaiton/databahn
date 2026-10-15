@@ -1,5 +1,6 @@
 import { fmtCount, fmtSize, type Amount, type Funnel } from "@/app/lib/environment";
 import { HEALTH_META } from "./HealthBadge";
+import { ReductionBar, SegmentSwatch, type ReductionSegment } from "./ReductionBar";
 
 export type FunnelMode = "rate" | "total";
 
@@ -53,10 +54,14 @@ export function FunnelBars({
   funnel,
   mode,
   showDestinations = true,
+  reducedSplit,
 }: {
   funnel: Omit<Funnel, "perDestination"> & { perDestination?: Funnel["perDestination"] };
   mode: FunnelMode;
   showDestinations?: boolean;
+  /** Which rule types make up "Reduced": drawn as the same split bar the
+   * Savings page uses, so the two are recognisably the same 38%. */
+  reducedSplit?: ReductionSegment[];
 }) {
   const base = Math.max(funnel.received.events, 1);
   const rows: { label: string; hint: string; amount: Amount; color: string; tone?: string }[] = [
@@ -98,9 +103,35 @@ export function FunnelBars({
             </div>
             {/* One hue for the flow itself; only what the rules removed is
                 set apart. Four colours read as four unrelated things. */}
-            <div className="h-1 rounded-full bg-muted/30 overflow-hidden mt-1">
-              <div className="h-full rounded-full opacity-70" style={{ width: `${Math.min(100, (r.amount.events / base) * 100)}%`, background: r.color }} />
-            </div>
+            {r.label === "Reduced" ? (
+              // Sized by data volume, like its label ("38% of size"); the
+              // events count removed is smaller because rules trim fields
+              // as well as drop whole events.
+              <div className="mt-1">
+                <ReductionBar
+                  height={4}
+                  segments={
+                    reducedSplit && reducedSplit.length
+                      ? reducedSplit
+                      : [{ label: "Removed by rules", share: funnel.received.gb > 0 ? funnel.reduced.gb / funnel.received.gb : 0 }]
+                  }
+                />
+                {reducedSplit && reducedSplit.length > 0 && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                    {reducedSplit.map((seg, i) => (
+                      <span key={seg.label} className="inline-flex items-center gap-1.5">
+                        <SegmentSwatch label={seg.label} index={i} />
+                        {seg.label} <span className="font-mono-db text-foreground/80">{Math.round(seg.share * 100)}%</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-1 rounded-full bg-muted/30 overflow-hidden mt-1">
+                <div className="h-full rounded-full opacity-70" style={{ width: `${Math.min(100, (r.amount.events / base) * 100)}%`, background: r.color }} />
+              </div>
+            )}
           </div>
         );
       })}

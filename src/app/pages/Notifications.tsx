@@ -18,6 +18,7 @@ import { ChannelMonogram } from "@/app/components/shared/ChannelMonogram";
 import { Switch } from "@/app/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
+import { useEscape } from "@/app/lib/useEscape";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low"];
 const SEVERITY_EDGE: Record<Severity, string> = { critical: "var(--db-red)", high: "#f97316", medium: "#facc15", low: "rgba(178,181,190,0.5)" };
@@ -174,6 +175,7 @@ function RoutingSection({ justAdded }: { justAdded: string | null }) {
   const { channels, routing } = notifications;
   const [open, setOpen] = useState(() => Boolean(justAdded));
   const [removing, setRemoving] = useState<NotificationChannel | null>(null);
+  useEscape(() => setRemoving(null), Boolean(removing));
   useEffect(() => {
     if (justAdded) setOpen(true);
   }, [justAdded]);

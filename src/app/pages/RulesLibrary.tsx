@@ -10,6 +10,7 @@ import { groupByCategory, liveCategoryStats } from "@/app/data/rules";
 import { useSession } from "@/app/lib/SessionContext";
 import { useEnvironment } from "@/app/lib/environment";
 import { categoriesForSource } from "@/app/data/rules";
+import { NoResults } from "@/app/components/shared/NoResults";
 
 const ALL_SOURCES = "__all__";
 
@@ -132,10 +133,17 @@ export default function RulesLibrary() {
       </div>
 
       {scoped.length === 0 ? (
-        <EmptyState
-          icon={ListFilter}
-          title="No rules match"
-          description="Try a different source, category, or search term."
+        <NoResults
+          what="rules"
+          query={query}
+          hint="Try a different source, category, or search term."
+          onClear={() => {
+            setQuery("");
+            setCategory(undefined);
+            setSourceId(undefined);
+            setOffOnly(false);
+          }}
+          clearLabel="Clear filters"
         />
       ) : (
         <div className="space-y-8">

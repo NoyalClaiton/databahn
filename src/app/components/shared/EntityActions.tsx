@@ -13,6 +13,7 @@ import {
 } from "@/app/components/ui/dropdown-menu";
 import { PauseDialog } from "./PauseDialog";
 import { HealthDot } from "./HealthBadge";
+import { useEscape } from "@/app/lib/useEscape";
 
 export type ActionTarget = { kind: "source"; s: SourceView } | { kind: "destination"; d: DestinationView };
 
@@ -37,6 +38,7 @@ function describe(ts: ActionTarget[]) {
 /* ------------------------------------------------------------------ */
 
 function Frame({ title, children, onClose, footer }: { title: string; children: ReactNode; onClose: () => void; footer: ReactNode }) {
+  useEscape(onClose);
   // Portalled: rendered inside an animated (transformed) table card, a
   // fixed overlay is positioned against the card, not the window.
   return createPortal(
@@ -306,7 +308,7 @@ export function useEntityActions(targets: ActionTarget[], opts?: { onDone?: () =
       <DropdownMenuSeparator />
       <Item
         icon={ListFilter}
-        label="View reduction rules"
+        label="See rules"
         reason={!single ? "Select one source" : targets[0].kind !== "source" && "Rules apply to sources"}
         onSelect={() => targets[0].kind === "source" && navigate("/rules", { state: { sourceId: targets[0].s.connectorId } })}
       />

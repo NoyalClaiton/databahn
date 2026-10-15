@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Database, Send, Waypoints, Search, Share2, ListFilter,
   LogOut, UserRound, HelpCircle, PanelLeftClose, PanelLeftOpen,
-  RotateCcw, X, Settings, Bell, ChevronDown, BellRing, FlaskConical, ArrowRight,
+  RotateCcw, X, Settings, PiggyBank, Bell, ChevronDown, BellRing, FlaskConical, ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { GuidedTourOverlay } from "./GuidedTourOverlay";
@@ -25,7 +25,12 @@ import {
 const NAV_GROUPS = [
   {
     label: "Overview",
-    items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard, end: true }],
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+      // Cost has its own page so it never sits in an engineer's way on
+      // Pipeline or the source drawer.
+      { to: "/savings", label: "Savings", icon: PiggyBank },
+    ],
   },
   {
     label: "Onboard",
@@ -82,17 +87,17 @@ function StatusPill() {
   const { counts, total } = env.summary;
 
   const parts = [
-    stopped.length && `${stopped.length} source${stopped.length === 1 ? "" : "s"} not sending`,
+    stopped.length && `${stopped.length} source${stopped.length === 1 ? "" : "s"} stopped`,
     destProblems.length && `${destProblems.length} destination${destProblems.length === 1 ? "" : "s"} failing`,
-    !stopped.length && below.length && `${below.length} below normal`,
+    !stopped.length && below.length && `${below.length} degraded`,
     !stopped.length && !below.length && unrouted.length && `${unrouted.length} not routed`,
   ].filter(Boolean) as string[];
   const label = parts.length ? parts.join(" · ") : total === 1 ? "1 source sending" : `All ${total} sources sending`;
   // What the pill shows: the count first, a short label, and its own dot.
   const destStopped = destProblems.some((d) => d.state === "stopped");
   const segments: { n: number; label: string; tone: "bad" | "warn" }[] = [
-    ...(stopped.length ? [{ n: stopped.length, label: `source${stopped.length === 1 ? "" : "s"} down`, tone: "bad" as const }] : []),
-    ...(below.length ? [{ n: below.length, label: "below normal", tone: "warn" as const }] : []),
+    ...(stopped.length ? [{ n: stopped.length, label: `source${stopped.length === 1 ? "" : "s"} stopped`, tone: "bad" as const }] : []),
+    ...(below.length ? [{ n: below.length, label: "degraded", tone: "warn" as const }] : []),
     ...(destProblems.length
       ? [{ n: destProblems.length, label: `destination${destProblems.length === 1 ? "" : "s"}`, tone: destStopped ? ("bad" as const) : ("warn" as const) }]
       : []),
@@ -122,7 +127,14 @@ function StatusPill() {
           aria-label={`Pipeline status: ${label}`}
           className="group inline-flex items-center gap-3 h-8 rounded-full border border-border bg-card/60 pl-3 pr-2 text-xs transition-colors hover:bg-muted/30 hover:border-muted-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-muted/30"
         >
-          {segments.length === 0 ? (
+          {env.destinations.length === 0 ? (
+            // Sources but nowhere to send them: the same "Setup incomplete"
+            // the dashboard says, not "All systems normal".
+            <span className="inline-flex items-center gap-2">
+              <StatusDot tone="warn" />
+              <span className="text-foreground/85 whitespace-nowrap">No destination yet</span>
+            </span>
+          ) : segments.length === 0 ? (
             <span className="inline-flex items-center gap-2">
               <StatusDot tone="good" />
               <span className="text-foreground/85 whitespace-nowrap">All systems normal</span>
@@ -150,7 +162,7 @@ function StatusPill() {
         <div className="max-h-[65vh] overflow-y-auto pb-1.5">
           {stopped.length > 0 && (
             <>
-              <Heading>Not sending · {stopped.length}</Heading>
+              <Heading>Stopped · {stopped.length}</Heading>
               {stopped.map((s) => (
                 <SourceItem key={s.id} s={s} line={`last event ${fmtAgo(s.lastEventMin)}`} />
               ))}
@@ -158,7 +170,7 @@ function StatusPill() {
           )}
           {below.length > 0 && (
             <>
-              <Heading>Below normal · {below.length}</Heading>
+              <Heading>Degraded · {below.length}</Heading>
               {below.map((s) => (
                 <SourceItem
                   key={s.id}
