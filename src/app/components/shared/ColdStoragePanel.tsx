@@ -5,6 +5,7 @@ import { Input } from "@/app/components/ui/input";
 import { Button } from "@/app/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import type { ColdStorageTarget } from "@/app/lib/SessionContext";
+import { DRAWER_WIDTH } from "./PageLayout";
 import type { FlowNode } from "./PipelineSankey";
 
 /**
@@ -62,6 +63,7 @@ export function ColdStoragePanel({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[95] bg-background/70 backdrop-blur-sm flex justify-end"
+        style={{ paddingRight: "var(--cruz-width, 0px)" }}
         onClick={onClose}
       >
         <motion.div
@@ -70,7 +72,7 @@ export function ColdStoragePanel({
           exit={{ x: 40, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-lg h-full bg-card border-l border-border overflow-y-auto"
+          className={`w-full ${DRAWER_WIDTH} h-full bg-card border-l border-border overflow-y-auto`}
           role="dialog"
           aria-label="Cold storage"
         >

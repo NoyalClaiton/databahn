@@ -4,6 +4,7 @@ import { AnimatePresence } from "motion/react";
 import { SessionProvider, useSession } from "@/app/lib/SessionContext";
 import { CruzProvider } from "@/app/lib/CruzContext";
 import { cruzRespond } from "@/app/lib/cruzResponses";
+import { useEnvironment } from "@/app/lib/environment";
 import { AppShell } from "@/app/components/shared/AppShell";
 import { PageTransition } from "@/app/components/shared/PageLayout";
 import Dashboard from "@/app/pages/Dashboard";
@@ -18,6 +19,8 @@ import SearchExperience from "@/app/pages/SearchExperience";
 import GraphView from "@/app/pages/GraphView";
 import RulesLibrary from "@/app/pages/RulesLibrary";
 import GenericConnectorWizard from "@/app/pages/GenericConnectorWizard";
+import Notifications from "@/app/pages/Notifications";
+import NotificationConnect from "@/app/pages/NotificationConnect";
 
 /** AnimatePresence keyed on pathname so every route change slides rather than
  * hard-swapping (see PageTransition). */
@@ -39,6 +42,8 @@ function AnimatedRoutes() {
         <Route path="/search" element={<PageTransition><SearchExperience /></PageTransition>} />
         <Route path="/graph" element={<PageTransition><GraphView /></PageTransition>} />
         <Route path="/rules" element={<PageTransition><RulesLibrary /></PageTransition>} />
+        <Route path="/notifications" element={<PageTransition><Notifications /></PageTransition>} />
+        <Route path="/notifications/connect/:type" element={<PageTransition><NotificationConnect /></PageTransition>} />
       </Routes>
     </AnimatePresence>
   );
@@ -50,9 +55,19 @@ function AnimatedRoutes() {
  * reach useSession() before handing the closure down to CruzProvider. */
 function CruzWithSession({ children }: { children: ReactNode }) {
   const { coldStorageTargets, wizard } = useSession();
+  const env = useEnvironment();
   const coldStorageConnected = coldStorageTargets.length > 0;
   return (
-    <CruzProvider respond={(text) => cruzRespond(text, coldStorageConnected, wizard?.connectorName, wizard?.connectorKind)}>{children}</CruzProvider>
+    <CruzProvider
+      respond={(text) =>
+        cruzRespond(text, coldStorageConnected, wizard?.connectorName, wizard?.connectorKind, [
+          ...env.sources.map((s) => ({ kind: "source" as const, name: s.name, label: s.label, state: s.state, sinceMin: s.sinceMin, gbPerDay: s.gbPerDay, incident: s.incident })),
+          ...env.destinations.map((d) => ({ kind: "destination" as const, name: d.name, state: d.state, sinceMin: d.sinceMin, gbPerDay: d.gbIn, incident: d.incident })),
+        ])
+      }
+    >
+      {children}
+    </CruzProvider>
   );
 }
 

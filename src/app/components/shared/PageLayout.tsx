@@ -15,7 +15,11 @@ export function PageTransition({ children }: { children: ReactNode }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -40 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="size-full"
+      // min-h, not a fixed height: a fixed-height wrapper let taller pages
+      // overflow it, so the shell's bottom padding sat under the wrapper
+      // instead of under the content, every scrolling page ran flush to
+      // the bottom edge while keeping its full gap at the top.
+      className="w-full min-h-full"
     >
       {children}
     </motion.div>
@@ -57,7 +61,7 @@ export function PageHeader({
           }}
         >{title}</h1>
         {subtitle && (
-          <p className={`text-[15px] leading-relaxed text-muted-foreground ${centered ? "max-w-xl mx-auto" : "max-w-2xl"}`}>
+          <p className={`text-base leading-relaxed text-muted-foreground ${centered ? "max-w-xl mx-auto" : "max-w-2xl"}`}>
             {subtitle}
           </p>
         )}
@@ -124,12 +128,14 @@ export function StatTile({
    * user discovering it by hovering. */
   actionLabel?: string;
 }) {
-  const borderColor = tone === "good" ? "border-success/40" : tone === "warning" ? "border-amber-500/40" : "";
+  // A thin coloured edge, not a coloured frame: three amber frames in a row
+  // shouted louder than the status card they sit under.
+  const edge = tone === "good" ? "shadow-[inset_2px_0_0_var(--db-green)]" : tone === "warning" ? "shadow-[inset_2px_0_0_#f59e0b]" : "";
   const Tag = onClick ? "button" : "div";
   return (
     <Tag
       onClick={onClick}
-      className={`text-left rounded border bg-card p-4 transition-colors ${borderColor ? `border-l-2 ${borderColor}` : "border-border"} ${
+      className={`text-left rounded border border-border bg-card p-4 transition-colors ${edge} ${
         onClick ? "hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer w-full" : ""
       }`}
     >
@@ -139,7 +145,7 @@ export function StatTile({
       </div>
       <p className="text-lg font-mono-db text-foreground">{value}</p>
       <p className="text-xs text-muted-foreground">{sub}</p>
-      {onClick && actionLabel && <p className="text-[11px] text-primary mt-1">{actionLabel} →</p>}
+      {onClick && actionLabel && <p className="text-xs text-primary mt-1">{actionLabel} →</p>}
     </Tag>
   );
 }
@@ -158,3 +164,7 @@ export function StaggerItem({ index, children }: { index: number; children: Reac
     </motion.div>
   );
 }
+
+/** Every right-side drawer (source/destination details, rules, routing,
+ * cold storage) shares this width, so they all open to the same edge. */
+export const DRAWER_WIDTH = "max-w-[800px]";

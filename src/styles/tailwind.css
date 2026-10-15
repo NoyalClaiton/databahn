@@ -98,3 +98,42 @@
 @media (prefers-reduced-motion: reduce) {
   .badge-pop { animation: none !important; }
 }
+
+/* A table row picked from the pipeline diagram: starts bright, settles to
+   its resting tint, so the eye lands on it after the scroll. */
+@keyframes row-flash {
+  from { background-color: var(--row-flash); }
+  to { background-color: var(--row-tint); }
+}
+.row-flash {
+  animation: row-flash 1.4s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-flash { animation: none !important; }
+}
+
+/* One scrollbar across the app. Without this the browser drew its default
+   light scrollbar on the main page and a different overlay one in panels,
+   two styles side by side on a dark UI. color-scheme also darkens native
+   controls (date pickers, select menus) the same way. */
+:root {
+  color-scheme: dark;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(178, 181, 190, 0.28) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(178, 181, 190, 0.28);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(178, 181, 190, 0.45);
+}

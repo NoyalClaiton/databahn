@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_RULES, type ReductionRule } from "@/app/data/rules";
+import { DEFAULT_NOTIFICATIONS, SAMPLE_CHANNEL, withChannel, type NotificationSettings } from "./notifications";
 
 export type FieldStatus = "empty" | "filled" | "valid" | "invalid";
 
@@ -9,9 +10,11 @@ export interface WizardFieldState {
   status: FieldStatus;
 }
 
+export type WizardKind = "source" | "destination" | "notification";
+
 export interface WizardState {
   connectorName: string;
-  connectorKind: "source" | "destination";
+  connectorKind: WizardKind;
   stepIndex: number;
   totalSteps: number;
   stepLabel: string;
@@ -40,6 +43,41 @@ export interface FlowRoute {
  * more than one (an EU bucket and a US bucket for residency, say), so it
  * needs its own name per instance rather than reusing a fixed connector
  * name the way `isConnected` and the catalogue assume. */
+/** What the user has done about a source's health, layered over whatever the
+ * environment itself reports. Kept separate from the simulated telemetry so
+ * an acknowledgement or a fix survives a reload the same way a connection
+ * does, instead of the demo forgetting someone already said "I'm on it." */
+export interface SourceStatusOverride {
+  /** Fix verified: the source is recovering from this moment. */
+  recoveredAt?: number;
+  /** How long it had been down when the fix landed. */
+  downMin?: number;
+  /** Someone took ownership, so the team doesn't triple up on one problem. */
+  ackAt?: number;
+  /** Who owns it. Missing with ackAt set means the signed-in user (the
+   * original "I'm on it", before ownership named a person). */
+  ownerId?: string;
+  ownerVia?: "app" | "slack" | "teams";
+  assignedBy?: string;
+  previousOwnerId?: string;
+  /** Explicitly released, so a seeded owner doesn't come back. */
+  released?: boolean;
+  /** Paused on purpose (maintenance), alerts held until this time. */
+  /** Infinity-like value (Number.MAX_SAFE_INTEGER) means "until resumed". */
+  pausedUntil?: number;
+  pausedAt?: number;
+  pauseReason?: string;
+  /** Resumed by hand, which also ends a pause that came with the sample. */
+  resumedAt?: number;
+  /** Disconnected. Session connections are removed outright; this covers
+   * the sample environment's, which aren't this session's to delete. */
+  removed?: boolean;
+  /** Routing changed by hand (sample sources; session ones use routes). */
+  destIds?: string[];
+  /** An upcoming risk (an expiring credential) was dealt with. */
+  riskResolved?: boolean;
+}
+
 export interface ColdStorageTarget {
   id: string;
   label: string;
@@ -82,7 +120,28 @@ interface SessionContextValue {
    * once a second target exists to choose between. */
   coldStorageAssignments: Record<string, string>;
   assignColdStorage: (sourceId: string, targetId: string | null) => void;
+  /** Loads the ~170-source sample environment alongside whatever this
+   * session connected, so health and the dashboard can be shown at the
+   * scale they're designed for. Off by default, so the onboarding
+   * walkthrough still starts from an empty workspace. */
+  sampleEnvironment: boolean;
+  setSampleEnvironment: (on: boolean) => void;
+  sourceStatus: Record<string, SourceStatusOverride>;
+  /** `null` clears every override for that source. */
+  updateSourceStatus: (id: string, patch: Partial<SourceStatusOverride> | null) => void;
+  /** Recommendations the user said "not now" to. */
+  dismissedRecs: string[];
+  dismissRec: (id: string) => void;
+  /** Whose eyes the dashboard is shown through. A viewing preference, not
+   * data, so it survives "Reset demo data". */
+  lens: DashboardLens;
+  setLens: (lens: DashboardLens) => void;
+  /** Where alerts go outside the app: channels and routing by severity. */
+  notifications: NotificationSettings;
+  setNotifications: (update: (prev: NotificationSettings) => NotificationSettings) => void;
 }
+
+export type DashboardLens = "executive" | "engineer";
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
@@ -98,6 +157,30 @@ const HIDDEN_STORAGE_KEY = "databahn-hidden";
 const RULES_STORAGE_KEY = "databahn-rules";
 const COLD_STORAGE_TARGETS_KEY = "databahn-cold-storage-targets";
 const COLD_STORAGE_ASSIGNMENTS_KEY = "databahn-cold-storage-assignments";
+const SAMPLE_ENV_KEY = "databahn-sample-environment";
+const SOURCE_STATUS_KEY = "databahn-source-status";
+const DISMISSED_RECS_KEY = "databahn-dismissed-recs";
+const LENS_KEY = "databahn-dashboard-lens";
+const NOTIFICATIONS_KEY = "databahn-notifications";
+
+/** One loader for the newer keys, rather than another copy of the same
+ * try/parse/fallback shape per key. */
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* storage may be unavailable; the session still works in memory */
+  }
+}
 
 /** Connected entities persist across reloads. In the real product this is
  * server state; here it means an accidental refresh during a walkthrough does
@@ -164,6 +247,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [rules, setRules] = useState<ReductionRule[]>(loadRules);
   const [coldStorageTargets, setColdStorageTargets] = useState<ColdStorageTarget[]>(loadColdStorageTargets);
   const [coldStorageAssignments, setColdStorageAssignments] = useState<Record<string, string>>(loadColdStorageAssignments);
+  const [sampleEnvironment, setSampleEnvironmentState] = useState<boolean>(() => loadJson(SAMPLE_ENV_KEY, false));
+  const [notifications, setNotificationsState] = useState<NotificationSettings>(
+    () =>
+      loadJson<NotificationSettings | null>(NOTIFICATIONS_KEY, null) ??
+      // First load with the sample already on (saved before notifications
+      // existed) still gets the sample's channel.
+      (loadJson(SAMPLE_ENV_KEY, false) ? withChannel(DEFAULT_NOTIFICATIONS, SAMPLE_CHANNEL, ["critical", "high"]) : DEFAULT_NOTIFICATIONS),
+  );
+  useEffect(() => saveJson(NOTIFICATIONS_KEY, notifications), [notifications]);
+  const setNotifications = useCallback((update: (prev: NotificationSettings) => NotificationSettings) => setNotificationsState(update), []);
+  // The sample's history says alerts went to #secops-pipeline, so turning it
+  // on connects that channel (if nothing is connected yet), and turning it
+  // off removes it again. A user's own channels are never touched.
+  const setSampleEnvironment = useCallback((on: boolean) => {
+    setSampleEnvironmentState(on);
+    setNotificationsState((prev) => {
+      const without = { ...prev, channels: prev.channels.filter((c) => !c.sample) };
+      for (const sv of Object.keys(without.routing) as (keyof typeof without.routing)[])
+        without.routing = { ...without.routing, [sv]: without.routing[sv].filter((id) => id !== SAMPLE_CHANNEL.id) };
+      return on && without.channels.length === 0 ? withChannel(without, SAMPLE_CHANNEL, ["critical", "high"]) : without;
+    });
+  }, []);
+  const [sourceStatus, setSourceStatus] = useState<Record<string, SourceStatusOverride>>(() => loadJson(SOURCE_STATUS_KEY, {}));
+  const [dismissedRecs, setDismissedRecs] = useState<string[]>(() => loadJson(DISMISSED_RECS_KEY, []));
+  const [lens, setLens] = useState<DashboardLens>(() => loadJson<DashboardLens>(LENS_KEY, "engineer"));
+  useEffect(() => saveJson(LENS_KEY, lens), [lens]);
+
+  useEffect(() => saveJson(SAMPLE_ENV_KEY, sampleEnvironment), [sampleEnvironment]);
+  useEffect(() => saveJson(SOURCE_STATUS_KEY, sourceStatus), [sourceStatus]);
+  useEffect(() => saveJson(DISMISSED_RECS_KEY, dismissedRecs), [dismissedRecs]);
 
   useEffect(() => {
     try {
@@ -269,6 +382,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setRules(DEFAULT_RULES);
     setColdStorageTargets([]);
     setColdStorageAssignments({});
+    setSampleEnvironmentState(false);
+    setNotificationsState(DEFAULT_NOTIFICATIONS);
+    setSourceStatus({});
+    setDismissedRecs([]);
+  }, []);
+
+  const updateSourceStatus = useCallback((id: string, patch: Partial<SourceStatusOverride> | null) => {
+    setSourceStatus((prev) => {
+      const next = { ...prev };
+      if (patch === null) delete next[id];
+      else next[id] = { ...prev[id], ...patch };
+      return next;
+    });
+  }, []);
+
+  const dismissRec = useCallback((id: string) => {
+    setDismissedRecs((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }, []);
 
   const isConnected = useCallback(
@@ -324,6 +454,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       removeColdStorageTarget,
       coldStorageAssignments,
       assignColdStorage,
+      sampleEnvironment,
+      setSampleEnvironment,
+      sourceStatus,
+      updateSourceStatus,
+      dismissedRecs,
+      dismissRec,
+      lens,
+      setLens,
+      notifications,
+      setNotifications,
     }),
     [
       wizard,
@@ -346,6 +486,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       removeColdStorageTarget,
       coldStorageAssignments,
       assignColdStorage,
+      sampleEnvironment,
+      sourceStatus,
+      updateSourceStatus,
+      dismissedRecs,
+      dismissRec,
+      lens,
+      notifications,
+      setSampleEnvironment,
+      setNotifications,
     ],
   );
 

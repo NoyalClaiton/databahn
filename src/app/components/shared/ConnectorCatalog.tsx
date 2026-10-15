@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 import type { ConnectorDef, ConnectorKind } from "@/app/data/connectors";
 import { useSession } from "@/app/lib/SessionContext";
 import { buildConnectorLiveState, type ConnectorLiveState } from "@/app/lib/pipelineData";
+import { useEnvironment, connectorSummary, fmtSize, type ConnectorSummary } from "@/app/lib/environment";
 import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import { StaggerItem } from "./PageLayout";
 import { ContextualHelpTip } from "./ContextualHelpTip";
@@ -19,15 +20,22 @@ export function ConnectorCatalogCard({
   connector,
   onSelect,
   live,
+  connected: connectedOverride,
+  liveContent,
 }: {
   connector: ConnectorDef;
   onSelect: () => void;
   /** Present only once this connector is connected. Computed once by the
    * catalog rather than per card, so 28 cards don't each re-scan 940 rules. */
   live?: ConnectorLiveState;
+  /** For catalogs that aren't data connectors (notification channels), which
+   * know their own connected state rather than the session's connections. */
+  connected?: boolean;
+  /** Replaces the source/destination live lines with the caller's own. */
+  liveContent?: ReactNode;
 }) {
   const { isConnected } = useSession();
-  const connected = isConnected(connector.name);
+  const connected = connectedOverride ?? Boolean(isConnected(connector.name));
   const isSource = connector.kind === "source";
 
   return (
@@ -72,8 +80,8 @@ export function ConnectorCatalogCard({
             green treatment, the logo dot, the Manage verb, and the live line
             below, so the chip was the fifth encoding of one fact. */}
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-semibold text-foreground leading-tight">{connector.name}</p>
-          <p className="text-[13px] text-muted-foreground mt-0.5">{connector.tagline}</p>
+          <p className="text-base font-semibold text-foreground leading-tight">{connector.name}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{connector.tagline}</p>
         </div>
 
         <span className="inline-flex items-center gap-1 text-xs text-primary shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -87,11 +95,13 @@ export function ConnectorCatalogCard({
           it's actually moving, so the card swaps capability for state rather
           than keeping stale advertising for data types the wizard may not even
           have switched on. */}
-      {connected && live ? (
+      {connected && liveContent ? (
+        <div className="mt-4 pt-3 border-t border-success/15 space-y-1 text-xs">{liveContent}</div>
+      ) : connected && live ? (
         // Two explicit rows rather than one wrapping row: throughput and
         // routing are separate facts, and letting them share a wrapping line
         // left a dangling "·" at the break.
-        <div className="mt-4 pt-3 border-t border-success/15 space-y-1 text-[11px]">
+        <div className="mt-4 pt-3 border-t border-success/15 space-y-1 text-xs">
           <p className="text-foreground">
             {isSource ? (
               <>
@@ -136,7 +146,7 @@ export function ConnectorCatalogCard({
           ))}
           {connector.dataTypes.length > 4 && (
             <ContextualHelpTip content={connector.dataTypes.slice(4).join(", ")}>
-              <span className="font-mono-db text-[10px] text-info border border-info/30 rounded px-2 py-1 bg-info/10 cursor-pointer">
+              <span className="font-mono-db text-[10px] text-info border border-info/30 rounded px-2 py-1 bg-info/10">
                 +{connector.dataTypes.length - 4} more
               </span>
             </ContextualHelpTip>
@@ -161,11 +171,20 @@ export function ConnectorCatalog({
   const { connected: connectedEntities, routes, rules } = useSession();
   // Once per grid, not once per card.
   const liveByConnector = buildConnectorLiveState(connectedEntities, routes, rules);
+  // Everything connected, the sample environment included, from the same
+  // source Pipeline reads, so "Cloud · 36" means the same 36 on both pages.
+  const env = useEnvironment();
+  const summary = connectorSummary(env);
 
   const inKind = connectors.filter((c) => c.kind === kind);
   /** Broad family (the part before the comma), which is how people actually
    * narrow a large catalogue: "show me the identity ones". */
   const families = Array.from(new Set(inKind.map((c) => c.category.split(",")[0].trim()))).sort();
+  const familyOf = (c: ConnectorDef) => c.category.split(",")[0].trim();
+  // Chips are filters: the group and how many types it holds, the pattern
+  // every filter chip in the app follows. What's connected lives on the
+  // cards themselves.
+  const chipLabel = (name: string, count: number) => `${name} (${count})`;
 
   const q = query.trim().toLowerCase();
   const matches = inKind.filter((c) => {
@@ -189,27 +208,26 @@ export function ConnectorCatalog({
       <div className="flex flex-wrap items-center justify-center gap-1.5 mb-4">
         <button
           onClick={() => setCategory(null)}
-          className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
             !category
               ? "border-primary/60 bg-primary/15 text-foreground"
               : "border-border text-muted-foreground hover:text-foreground"
           }`}
         >
-          All ({inKind.length})
+          {chipLabel("All", inKind.length)}
         </button>
         {families.map((f) => {
-          const count = inKind.filter((c) => c.category.split(",")[0].trim() === f).length;
           return (
             <button
               key={f}
               onClick={() => setCategory(category === f ? null : f)}
-              className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                 category === f
                   ? "border-primary/60 bg-primary/15 text-foreground"
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
-              {f} ({count})
+              {chipLabel(f, inKind.filter((c) => familyOf(c) === f).length)}
             </button>
           );
         })}
@@ -218,7 +236,13 @@ export function ConnectorCatalog({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" data-tour="connector-grid">
         {filtered.map((c, i) => (
           <StaggerItem key={c.id} index={i}>
-            <ConnectorCatalogCard connector={c} onSelect={() => onSelect(c.id)} live={liveByConnector[c.id]} />
+            <ConnectorCatalogCard
+              connector={c}
+              onSelect={() => onSelect(c.id)}
+              live={liveByConnector[c.id]}
+              connected={Boolean(summary[c.id])}
+              liveContent={summary[c.id] && !summary[c.id].fromSession ? <SummaryLines s={summary[c.id]} isSource={kind === "source"} /> : undefined}
+            />
           </StaggerItem>
         ))}
       </div>
@@ -236,11 +260,42 @@ export function ConnectorCatalog({
       )}
 
       {filtered.length > 0 && (
-        <p className="text-center text-[11px] text-muted-foreground/60 mt-6">
+        <p className="text-center text-xs text-muted-foreground/60 mt-6">
           Not seeing yours? Databahn ships 500+ integrations.{" "}
           <button className="text-info underline underline-offset-2">Request an integration</button>
         </p>
       )}
     </div>
+  );
+}
+
+/** A connected type's live state on its catalog card: how many, how much,
+ * and whether anything needs a look, in the card's usual two lines. */
+function SummaryLines({ s, isSource }: { s: ConnectorSummary; isSource: boolean }) {
+  if (!isSource)
+    return (
+      <>
+        <p className="text-foreground">
+          <span className="font-mono-db">{s.sourcesRouted}</span> sources routed
+          <span className="text-muted-foreground/40 mx-1.5">·</span>
+          <span className="text-muted-foreground font-mono-db">{fmtSize(s.gbPerDay)}/day</span>
+        </p>
+        <p className={s.state === "stopped" ? "text-destructive" : s.state === "degraded" ? "text-amber-400" : s.state === "recovering" ? "text-info" : "text-success"}>
+          {s.state === "stopped" ? "not accepting data" : s.state === "degraded" ? "rejecting some events" : s.state === "recovering" ? "recovering" : "accepting everything"}
+        </p>
+      </>
+    );
+  return (
+    <>
+      <p className="text-foreground">
+        <span className="font-mono-db">{s.count}</span> connected
+        <span className="text-muted-foreground/40 mx-1.5">·</span>
+        <span className="text-muted-foreground font-mono-db">{fmtSize(s.gbPerDay)}/day</span>
+      </p>
+      <p className={s.stopped ? "text-destructive" : s.degraded ? "text-amber-400" : "text-success"}>
+        {s.stopped ? `${s.stopped} not sending` : s.degraded ? `${s.degraded} below normal` : "all sending"}
+        {s.stopped > 0 && s.degraded > 0 && <span className="text-amber-400"> · {s.degraded} below normal</span>}
+      </p>
+    </>
   );
 }

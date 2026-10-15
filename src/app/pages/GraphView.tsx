@@ -6,6 +6,7 @@ import { ReefGraph } from "@/app/components/shared/ReefGraph";
 import { SearchInput } from "@/app/components/shared/SearchInput";
 import { ENTITY_INDEX, subgraphFrom } from "@/app/data/graphData";
 import { EmptyState } from "@/app/components/shared/StateViews";
+import { useEnvironment } from "@/app/lib/environment";
 import { useSession } from "@/app/lib/SessionContext";
 
 /** Concrete investigations to start from, mirroring the Search page so the
@@ -37,7 +38,10 @@ export default function GraphView() {
   const [asked, setAsked] = useState(Boolean(handoff));
   const [seedEntityId, setSeedEntityId] = useState<string | undefined>(handoff?.seedEntityId);
 
-  if (connected.length === 0) {
+  // The environment, so the sample's sources count, the same as every
+  // other page; a session connection alone left the graph empty.
+  const sourceCount = useEnvironment().sources.length;
+  if (sourceCount === 0) {
     return (
       <div className="w-full max-w-[1180px] mx-auto">
         <EmptyState
@@ -66,7 +70,7 @@ export default function GraphView() {
     <div className="w-full max-w-[1180px] mx-auto">
       <PageHeader
         title="See how it all connects"
-        subtitle={`Reef correlates entities across your ${connected.length} connected source${connected.length === 1 ? "" : "s"}, including data never evaluated by detection rules.`}
+        subtitle={`Reef correlates entities across your ${sourceCount} connected source${sourceCount === 1 ? "" : "s"}, including data never evaluated by detection rules.`}
       />
       <form
         onSubmit={(e) => {
@@ -97,7 +101,7 @@ export default function GraphView() {
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground/70 mt-4">
+          <p className="text-xs text-muted-foreground/70 mt-4">
             Reef correlates across every connected source, including records that never reached your SIEM.
           </p>
         </div>

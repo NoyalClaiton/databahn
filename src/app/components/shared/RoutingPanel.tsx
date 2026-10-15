@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Switch } from "@/app/components/ui/switch";
 import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
+import { DRAWER_WIDTH } from "./PageLayout";
 import type { FlowNode, FlowEdge } from "./PipelineSankey";
 
 /**
@@ -46,6 +47,7 @@ export function RoutingPanel({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[95] bg-background/70 backdrop-blur-sm flex justify-end"
+        style={{ paddingRight: "var(--cruz-width, 0px)" }}
         onClick={onClose}
       >
         <motion.div
@@ -54,7 +56,7 @@ export function RoutingPanel({
           exit={{ x: 40, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-lg h-full bg-card border-l border-border overflow-y-auto"
+          className={`w-full ${DRAWER_WIDTH} h-full bg-card border-l border-border overflow-y-auto`}
           role="dialog"
           aria-label="Source to destination routing"
         >

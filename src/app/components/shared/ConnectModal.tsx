@@ -29,6 +29,7 @@ export function ConnectModal({
   onClose,
   onContinue,
   onDisconnect,
+  copy,
 }: {
   connector: ConnectorDef | null;
   /** Already connected, so this becomes a manage dialog rather than a setup one. */
@@ -36,6 +37,18 @@ export function ConnectModal({
   onClose: () => void;
   onContinue: (id: string) => void;
   onDisconnect?: (id: string) => void;
+  /** Copy for catalogs that aren't data connectors (notification channels),
+   * where "read-only access to log types" isn't what's being granted. */
+  copy?: {
+    accessHeading?: string;
+    accessNote?: string;
+    configuration?: [string, string][];
+    disconnectBody?: string;
+    disconnectLabel?: string;
+    manageLabel?: string;
+    /** Replaces the fixed "Healthy" pill when the real state is known. */
+    status?: { label: string; tone: "good" | "warn" | "bad" | "info" };
+  };
 }) {
   const [value, setValue] = useState("");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -88,7 +101,7 @@ export function ConnectModal({
                   <p className="text-base font-semibold text-foreground">
                     {isConnected ? connector.name : `Connect ${connector.name}`}
                   </p>
-                  <p className="text-[13px] text-muted-foreground">{connector.tagline}</p>
+                  <p className="text-sm text-muted-foreground">{connector.tagline}</p>
                 </div>
               </div>
               <button
@@ -105,26 +118,33 @@ export function ConnectModal({
                 <div className="rounded border border-destructive/30 bg-destructive/5 p-4">
                   <p className="text-sm font-medium text-foreground">Disconnect {connector.name}?</p>
                   <p className="text-sm text-muted-foreground mt-2">
-                    {connector.kind === "source"
+                    {copy?.disconnectBody ??
+                      (connector.kind === "source"
                       ? "Databahn stops collecting from this source immediately. Data already delivered to your destinations is unaffected. You can reconnect it any time."
-                      : "Databahn stops routing data here immediately. Sources that only routed to this destination will show as not yet routed. You can reconnect it any time."}
+                      : "Databahn stops routing data here immediately. Sources that only routed to this destination will show as not yet routed. You can reconnect it any time.")}
                   </p>
                 </div>
               ) : isConnected ? (
                 <div className="rounded border border-border bg-background/40 p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[13px] text-foreground">Current configuration</span>
-                    <span className="inline-flex items-center gap-1.5 text-[11px] text-success">
-                      <span className="w-1.5 h-1.5 rounded-full bg-success live-pulse-dot" />
-                      Healthy
-                    </span>
+                    <span className="text-sm text-foreground">Current configuration</span>
+                    {(() => {
+                      const st = copy?.status ?? { label: "Healthy", tone: "good" as const };
+                      const cls = { good: "text-success bg-success", warn: "text-amber-400 bg-amber-500", bad: "text-destructive bg-destructive", info: "text-info bg-info" }[st.tone].split(" ");
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 text-xs ${cls[0]}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full live-pulse-dot ${cls[1]}`} />
+                          {st.label}
+                        </span>
+                      );
+                    })()}
                   </div>
-                  <dl className="space-y-1.5 text-[12px]">
-                    {[
+                  <dl className="space-y-1.5 text-xs">
+                    {(copy?.configuration ?? [
                       ["Collecting", `${connector.dataTypes.length} log types`],
                       ["Ingest", "ingest-usw2.databahn.ai:514 UDP"],
                       ["Last event", "3 seconds ago"],
-                    ].map(([k, v]) => (
+                    ]).map(([k, v]) => (
                       <div key={k} className="flex items-center justify-between gap-3">
                         <dt className="text-muted-foreground">{k}</dt>
                         <dd className="font-mono-db text-foreground text-right truncate">{v}</dd>
@@ -134,9 +154,9 @@ export function ConnectModal({
                 </div>
               ) : (
               <div className="rounded border border-border bg-background/40 p-4">
-                <p className="text-[13px] text-foreground mb-2.5 flex items-center gap-1.5">
+                <p className="text-sm text-foreground mb-2.5 flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-success" aria-hidden="true" />
-                  Databahn will request read-only access to:
+                  {copy?.accessHeading ?? "Databahn will request read-only access to:"}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {connector.dataTypes.map((t) => (
@@ -148,8 +168,8 @@ export function ConnectModal({
                     </span>
                   ))}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-2.5">
-                  You pick exactly which of these to collect on the next screen.
+                <p className="text-xs text-muted-foreground mt-2.5">
+                  {copy?.accessNote ?? "You pick exactly which of these to collect on the next screen."}
                 </p>
               </div>
               )}
@@ -191,15 +211,15 @@ export function ConnectModal({
                   {isConnected && onDisconnect ? (
                     <button
                       onClick={() => setConfirmingDisconnect(true)}
-                      className="text-[12px] text-destructive underline underline-offset-2"
+                      className="text-xs text-destructive underline underline-offset-2"
                     >
-                      Disconnect this {connector.kind}
+                      {copy?.disconnectLabel ?? `Disconnect this ${connector.kind}`}
                     </button>
                   ) : (
                     <a
                       href="#"
                       onClick={(e) => e.preventDefault()}
-                      className="text-[12px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
+                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
                     >
                       Integration guide <ExternalLink className="w-3 h-3" />
                     </a>
@@ -211,7 +231,7 @@ export function ConnectModal({
                   onClick={() => onContinue(connector.id)}
                   disabled={Boolean(field) && !isConnected && value.trim() === ""}
                 >
-                  {isConnected ? "Edit configuration" : "Continue to setup"}
+                  {isConnected ? copy?.manageLabel ?? "Edit configuration" : "Continue to setup"}
                 </Button>
               </div>
             )}

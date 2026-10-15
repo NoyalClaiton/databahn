@@ -94,7 +94,7 @@ export function LogTypeSelector({
                   )}
                   {t.defaultOn && (
                     <ContextualHelpTip content={t.rationale}>
-                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Sparkles className="w-2.5 h-2.5 text-info" aria-hidden="true" />
                         Cruz
                       </span>
@@ -103,7 +103,7 @@ export function LogTypeSelector({
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{t.purpose}</p>
               </div>
-              <span className="font-mono-db text-[11px] text-muted-foreground shrink-0 mt-0.5">
+              <span className="font-mono-db text-xs text-muted-foreground shrink-0 mt-0.5">
                 {(t.volumeShare * 100).toFixed(t.volumeShare < 0.01 ? 1 : 0)}%
               </span>
             </div>

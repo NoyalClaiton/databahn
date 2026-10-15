@@ -8,6 +8,8 @@ import { RuleRow } from "@/app/components/shared/RulePanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { groupByCategory, liveCategoryStats } from "@/app/data/rules";
 import { useSession } from "@/app/lib/SessionContext";
+import { useEnvironment } from "@/app/lib/environment";
+import { categoriesForSource } from "@/app/data/rules";
 
 const ALL_SOURCES = "__all__";
 
@@ -21,12 +23,19 @@ const ALL_SOURCES = "__all__";
 export default function RulesLibrary() {
   const { connected, rules, toggleRule } = useSession();
   const location = useLocation();
-  const initial = (location.state ?? {}) as { sourceId?: string; category?: string };
+  const initial = (location.state ?? {}) as { sourceId?: string; category?: string; offOnly?: boolean };
 
-  const sources = connected.filter((c) => c.kind === "source");
+  // One entry per connected source type that has rules, from the
+  // environment, so the sample's sources are included.
+  const env = useEnvironment();
+  const sources = Array.from(new Map(env.sources.map((s) => [s.connectorId, { id: s.connectorId, name: s.vendor }])).values()).filter(
+    (s) => categoriesForSource(s.id).length > 0,
+  );
   const [sourceId, setSourceId] = useState<string | undefined>(initial.sourceId);
   const [category, setCategory] = useState<string | undefined>(initial.category);
   const [query, setQuery] = useState("");
+  // "Turn on N more rules" lands here showing exactly those N.
+  const [offOnly, setOffOnly] = useState(Boolean(initial.offOnly));
 
   const stats = liveCategoryStats(rules, sourceId);
   const allCategories = Array.from(new Set(stats.map((c) => c.category)));
@@ -37,13 +46,14 @@ export default function RulesLibrary() {
   const bySourceAndQuery = useMemo(() => {
     return rules.filter((r) => {
       if (sourceId && !r.sourceIds.includes(sourceId)) return false;
+      if (offOnly && r.enabled) return false;
       if (query) {
         const q = query.toLowerCase();
         if (!r.name.toLowerCase().includes(q) && !r.reason.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [rules, sourceId, query]);
+  }, [rules, sourceId, query, offOnly]);
 
   const categoryCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -62,7 +72,11 @@ export default function RulesLibrary() {
     <div className="w-full max-w-[1180px] mx-auto">
       <PageHeader
         title="Reduction rules"
-        subtitle="Every rule currently applicable across your connected sources, search or filter to narrow it down."
+        subtitle={
+          env.sources.length > 0
+            ? "Every rule currently applicable across your connected sources, search or filter to narrow it down."
+            : "The full rule library. Nothing is connected yet, so none of these are running; they apply the moment a matching source is."
+        }
       />
 
       {/* Source narrows down to one of a handful of connected sources, a
@@ -84,12 +98,21 @@ export default function RulesLibrary() {
             ))}
           </SelectContent>
         </Select>
+        <button
+          onClick={() => setOffOnly((v) => !v)}
+          aria-pressed={offOnly}
+          className={`shrink-0 h-8 text-xs px-3 rounded-md border transition-colors ${
+            offOnly ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Off only
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-1.5 mb-4">
         <button
           onClick={() => setCategory(undefined)}
-          className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
             !category ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -99,7 +122,7 @@ export default function RulesLibrary() {
           <button
             key={c}
             onClick={() => setCategory(category === c ? undefined : c)}
-            className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
               category === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
             }`}
           >

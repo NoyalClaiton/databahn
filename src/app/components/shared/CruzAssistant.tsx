@@ -5,6 +5,7 @@ import { Sparkles, Send, ArrowRightLeft, PanelRightOpen, Check, Eye, Zap } from 
 import { useCruz } from "@/app/lib/CruzContext";
 import { useSession } from "@/app/lib/SessionContext";
 import { getRecommendations, getCruzContext } from "@/app/lib/cruzRecommendations";
+import { useEnvironment } from "@/app/lib/environment";
 import { Button } from "@/app/components/ui/button";
 
 const DEFAULT_PANEL_W = 300;
@@ -53,7 +54,8 @@ function WizardRecap() {
 function CruzContextCard() {
   const { wizard, connected, coldStorageTargets } = useSession();
   const location = useLocation();
-  const ctx = getCruzContext(location.pathname, wizard, connected, coldStorageTargets.length > 0);
+  const env = useEnvironment();
+  const ctx = getCruzContext(location.pathname, wizard, connected, coldStorageTargets.length > 0, env.summary);
 
   return (
     <div className="shrink-0 rounded border border-border bg-background/40 p-3">
@@ -95,7 +97,7 @@ function CruzWelcome({ recommendations, onSend }: { recommendations: string[]; o
 
       {recommendations.length > 0 && (
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-medium mb-2 flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-widest text-muted-foreground/50 font-medium mb-2 flex items-center gap-1.5">
             <Zap className="w-3 h-3" />
             Suggested
           </p>
@@ -121,7 +123,8 @@ export function CruzAssistant() {
   const { wizard } = useSession();
   const location = useLocation();
   const [draft, setDraft] = useState("");
-  const recommendations = getRecommendations(location.pathname, wizard);
+  const env = useEnvironment();
+  const recommendations = getRecommendations(location.pathname, wizard, env.summary);
   const hasMessages = messages.length > 0;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [panelWidth, setPanelWidth] = useState(loadPanelWidth);
@@ -161,6 +164,16 @@ export function CruzAssistant() {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
+
+  // Publishes how much of the right edge Cruz occupies, so right-side
+  // panels (source and destination details, rules, routing, cold storage)
+  // can open beside Cruz instead of on top of it. "Ask Cruz about this"
+  // from inside one of those panels used to open Cruz underneath it.
+  const occupiedWidth = !isOpen ? 0 : panelWidth > OVERLAY_THRESHOLD ? panelWidth : Math.min(panelWidth, OVERLAY_THRESHOLD);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--cruz-width", `${occupiedWidth}px`);
+  }, [occupiedWidth]);
+  useEffect(() => () => document.documentElement.style.setProperty("--cruz-width", "0px"), []);
 
   if (!isOpen) {
     return (
@@ -293,7 +306,7 @@ export function CruzAssistant() {
         animate={{ width: dockedWidth, opacity: 1 }}
         exit={{ width: 0, opacity: 0 }}
         transition={isDragging ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 32 }}
-        className={`relative z-[80] shrink-0 overflow-hidden ${isOverlay ? "" : "border-l border-border glass-card flex flex-col"}`}
+        className={`relative z-[96] shrink-0 overflow-hidden ${isOverlay ? "" : "border-l border-border glass-card flex flex-col"}`}
         role={isOverlay ? undefined : "complementary"}
         aria-label={isOverlay ? undefined : "Cruz assistant"}
       >
@@ -312,7 +325,7 @@ export function CruzAssistant() {
           exit={{ x: 24, opacity: 0 }}
           transition={isDragging ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 32 }}
           style={{ width: panelWidth }}
-          className="absolute inset-y-0 right-0 z-[85] border-l border-border glass-card flex flex-col overflow-hidden shadow-2xl"
+          className="absolute inset-y-0 right-0 z-[97] border-l border-border glass-card flex flex-col overflow-hidden shadow-2xl"
           role="complementary"
           aria-label="Cruz assistant"
         >

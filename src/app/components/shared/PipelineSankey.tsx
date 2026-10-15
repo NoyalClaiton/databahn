@@ -11,6 +11,8 @@ import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 import type { ReductionRule } from "@/app/data/rules";
 import { ContextualHelpTip } from "./ContextualHelpTip";
 import { useSession } from "@/app/lib/SessionContext";
+import type { HealthState } from "@/app/data/fleet";
+import { fmtCount, fmtSize } from "@/app/lib/environment";
 
 /** Active rule count for a category, scoped to whichever sources are
  * actually connected and computed live from `rules`, not the frozen
@@ -26,6 +28,18 @@ export interface FlowNode {
   /** GB/day ingested from this source. */
   volume: number;
   color: string;
+  /** This node's own reduction rate, 0-1, when it's known per node (sample
+   * environment sources, grouped rows). Unset falls back to the live rules. */
+  reduction?: number;
+  /** Health from the environment, so a stopped source reads as stopped right
+   * on its row instead of only in a separate widget. `label` is the short
+   * status shown before the throughput, empty when there's nothing to say. */
+  health?: { state: HealthState; label: string };
+  /** What actually flowed through this node in the selected range,
+   * outages included. Readouts show this, never a rate scaled by a guess. */
+  total?: { events: number; gb: number };
+  /** Events per minute right now, the secondary "is it flowing" figure. */
+  rateEpm?: number;
 }
 
 /**
@@ -42,10 +56,6 @@ const STAGES = [
   { id: "deliver", label: "Delivery", sub: "Routed to SIEM", factor: 0.48, latency: "0.2ms", ruleCategory: null },
 ] as const;
 
-/** Range changes the averaging window, so a short window shows the current
- * burst and longer windows smooth toward the baseline. Without this the
- * selector was a control that changed nothing. */
-export const RANGE_FACTOR: Record<string, number> = { "1H": 1.18, "24H": 1, "7D": 0.93, "30D": 0.88 };
 
 const ROW_H = 58;
 const ROW_GAP = 10;
@@ -58,6 +68,13 @@ function ribbon(x1: number, t1: number, b1: number, x2: number, t2: number, b2: 
   const c2 = x1 + (x2 - x1) * 0.55;
   return `M ${x1} ${t1} C ${c1} ${t1}, ${c2} ${t2}, ${x2} ${t2} L ${x2} ${b2} C ${c2} ${b2}, ${c1} ${b1}, ${x1} ${b1} Z`;
 }
+
+/** Node ids become SVG gradient ids referenced through url(#…). A space
+ * ("group:Network security") or other punctuation breaks that reference and
+ * the ribbon falls back to black, so only safe characters go in. */
+const svgId = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, "_");
+
+const RANGE_WORDS: Record<string, string> = { "1H": "hour", "24H": "24 hours", "7D": "7 days", "30D": "30 days" };
 
 export const fmtGb = (gb: number) => (gb >= 1000 ? `${(gb / 1000).toFixed(2)} TB` : `${Math.round(gb)} GB`);
 const epsOf = (gb: number) => Math.round(gb * 14);
@@ -87,7 +104,7 @@ function StageTile({
       {/* Six tiles in the same row a five-tile layout used to hold, without
           this "Payload sampling" and "Field trimming" wrap to two lines and
           throw off every tile's vertical rhythm. */}
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
+      <p title={label} className="text-xs text-muted-foreground uppercase tracking-wide whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
         {label}
       </p>
       {badge && (
@@ -150,6 +167,20 @@ function FlowRow({
   const unrouted = side === "source" && !hidden && routed === false;
   const noInflow = side === "destination" && !hidden && node.volume <= 0;
   const disconnectedFlow = unrouted || noInflow;
+  const healthState = node.health?.state;
+  const healthLabel = !hidden && !disconnectedFlow ? node.health?.label : undefined;
+  const healthTone =
+    healthState === "stopped" ? "text-destructive" : healthState === "degraded" ? "text-amber-400" : "text-muted-foreground";
+  const dotClass =
+    disconnectedFlow || healthState === "degraded"
+      ? "bg-amber-500"
+      : healthState === "stopped"
+        ? "bg-destructive"
+        : healthState === "recovering"
+          ? "bg-info"
+          : healthState === "paused"
+            ? "bg-muted-foreground/60"
+            : "bg-success";
 
   // Radix's dropdown item sits directly over this same row (the column is
   // only 268px wide with little room to open elsewhere), and closing the
@@ -216,30 +247,40 @@ function FlowRow({
             </span>
           )}
           {!hidden && (
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
-                disconnectedFlow ? "bg-amber-500" : "bg-success"
-              }`}
-            />
+            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${dotClass}`} />
           )}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className={`truncate text-[13px] font-medium ${disconnectedFlow ? "text-muted-foreground" : "text-foreground"}`}>{node.name}</p>
-            {!hidden && !disconnectedFlow && node.volume > 0 && <span className="font-mono-db text-[11px] text-muted-foreground">{pct}%</span>}
+            <p className={`truncate text-sm font-medium ${disconnectedFlow ? "text-muted-foreground" : "text-foreground"}`}>{node.name}</p>
+            {!hidden && !disconnectedFlow && node.volume > 0 && <span className="font-mono-db text-xs text-muted-foreground">{pct}%</span>}
           </div>
           {hidden ? (
-            <p className="text-[11px] text-muted-foreground/70 mt-0.5">Hidden from pipeline</p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">Hidden from pipeline</p>
           ) : unrouted ? (
-            <p className="text-[11px] text-amber-500/80 mt-0.5">Not routed to a destination</p>
+            <p className="text-xs text-amber-500/80 mt-0.5">Not routed to a destination</p>
           ) : noInflow ? (
-            <p className="text-[11px] text-amber-500/80 mt-0.5">No source routed here yet</p>
+            <p className="text-xs text-amber-500/80 mt-0.5">No source routed here yet</p>
           ) : (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="font-mono-db text-[11px] text-success">{fmtEps(node.volume)} eps</span>
-              <span className="text-[11px] text-muted-foreground/50">·</span>
-              <span className="font-mono-db text-[11px] text-muted-foreground">{fmtGb(node.volume)}/day</span>
+            <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+              {healthLabel && (
+                <>
+                  <span className={`text-xs font-medium truncate ${healthTone}`}>{healthLabel}</span>
+                  <span className="text-xs text-muted-foreground/50">·</span>
+                </>
+              )}
+              {node.total ? (
+                <span
+                  className="font-mono-db text-xs text-muted-foreground truncate"
+                  title={node.rateEpm !== undefined ? `≈ ${fmtCount(node.rateEpm)} events/min now` : undefined}
+                >
+                  <span className="text-success">{fmtCount(node.total.events)}</span>
+                  {!healthLabel && <> · {fmtSize(node.total.gb)}</>}
+                </span>
+              ) : (
+                <span className="font-mono-db text-xs text-success shrink-0">{fmtEps(node.volume)} eps</span>
+              )}
             </div>
           )}
         </div>
@@ -317,6 +358,11 @@ export function PipelineSankey({
   range: rangeProp,
   onRangeChange,
   preview,
+  ruleSourceIds,
+  groupedSourceCount,
+  selectedSourceId,
+  onDestinationClick,
+  selectedDestinationId,
 }: {
   sources: FlowNode[];
   destinations: FlowNode[];
@@ -343,6 +389,20 @@ export function PipelineSankey({
    * fully-interactive one on Pipeline overview itself, a badge says so
    * instead of leaving it to be discovered by clicking and finding out. */
   preview?: boolean;
+  /** Which connector ids rule counts are scoped to. Defaults to the row ids,
+   * which stops being true once rows are groups ("Network · 54"). */
+  ruleSourceIds?: string[];
+  /** Set when rows are groups: how many sources they stand for, so the
+   * header doesn't report "7 of 7 sources" for 167. */
+  groupedSourceCount?: number;
+  /** Lets the page own which row is selected, so a row picked here stays
+   * marked while the matching table rows are highlighted, and clearing that
+   * highlight deselects it here too. Uncontrolled when left undefined. */
+  selectedSourceId?: string | null;
+  /** Same pattern as a source row: takes the user to the matching table row,
+   * never straight into a drawer. */
+  onDestinationClick?: (destId: string) => void;
+  selectedDestinationId?: string | null;
   onHighwayClick: (ruleCategory?: string) => void;
   onSourceClick: (sourceId: string) => void;
   onAddSource?: () => void;
@@ -363,7 +423,7 @@ export function PipelineSankey({
 }) {
   const uid = useId();
   const { hiddenIds: sessionHiddenIds, toggleHidden, rules } = useSession();
-  const sourceIds = useMemo(() => sources.map((s) => s.id), [sources]);
+  const sourceIds = useMemo(() => ruleSourceIds ?? sources.map((s) => s.id), [sources, ruleSourceIds]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(800);
   // Session-wide (not local to this one mounted instance) so a source hidden
@@ -371,7 +431,8 @@ export function PipelineSankey({
   // navigating away from Pipeline and back instead of silently resetting.
   const hiddenIds = useMemo(() => new Set(sessionHiddenIds), [sessionHiddenIds]);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedState, setSelected] = useState<string | null>(null);
+  const selected = selectedSourceId !== undefined ? selectedSourceId : selectedState;
   const [rangeState, setRangeState] = useState("24H");
   const range = rangeProp ?? rangeState;
   const setRange = (r: string) => {
@@ -409,9 +470,18 @@ export function PipelineSankey({
     () => sources.filter((s) => !hiddenIds.has(s.id)),
     [sources, hiddenIds],
   );
-  const rangeFactor = RANGE_FACTOR[range] ?? 1;
   const totalInRaw = visible.reduce((a, s) => a + s.volume, 0);
-  const totalIn = totalInRaw * rangeFactor;
+  // Totals for the selected range, not rates. Each node carries what really
+  // flowed through it in the range (an outage earlier in the range counts as
+  // missing data); `scale` turns the diagram's GB/day geometry into those
+  // totals, so 30D reads as roughly 30 days' worth, not an averaged rate.
+  const allRate = sources.reduce((a, s) => a + s.volume, 0);
+  const allTotal = sources.reduce((a, s) => a + (s.total?.gb ?? s.volume), 0);
+  const scale = allRate > 0 ? allTotal / allRate : 1;
+  const totalIn = totalInRaw * scale;
+  const allEvents = sources.reduce((a, s) => a + (s.total?.events ?? 0), 0);
+  const eventsPerGb = allTotal > 0 && allEvents > 0 ? allEvents / allTotal : 0;
+  const rateIn = visible.reduce((a, s) => a + (s.rateEpm ?? 0), 0);
   const kept = 1 - reductionFactor;
   const active = selected ?? hovered;
 
@@ -442,7 +512,10 @@ export function PipelineSankey({
     (H - colContentH(count, hasAddButton)) / 2 + i * (ROW_H + ROW_GAP) + ROW_H / 2;
 
   const maxStack = H * 0.6;
-  const pxPerGb = totalIn > 0 ? maxStack / totalIn : 0;
+  // Geometry stays in the same unit the heights are drawn in (each node's
+  // GB/day), so ribbon thickness only ever shows share, whatever the range.
+  // Dividing by the range total here drew 1H ribbons ~22× too tall.
+  const pxPerGb = totalInRaw > 0 ? maxStack / totalInRaw : 0;
 
   // Position stacks between the volume-weighted Y center of source cards and
   // the volume-weighted Y center of active destination cards. When all flow
@@ -513,7 +586,7 @@ export function PipelineSankey({
       .filter((e) => e.destId === d.id)
       .map((e) => visible.find((s) => s.id === e.sourceId))
       .filter((s): s is FlowNode => Boolean(s));
-    const total = contributors.reduce((a, s) => a + s.volume * rangeFactor * kept, 0);
+    const total = contributors.reduce((a, s) => a + s.volume * scale * kept, 0);
     return { dest: d, contributors, total };
   });
   const totalDelivered = destInflows.reduce((a, d) => a + d.total, 0);
@@ -536,7 +609,9 @@ export function PipelineSankey({
             </span>
           )}
           <span className="text-xs text-muted-foreground ml-2">
-            {visible.length} of {sources.length} source{sources.length === 1 ? "" : "s"}
+            {groupedSourceCount !== undefined
+              ? `${groupedSourceCount} sources in ${sources.length} groups`
+              : `${visible.length} of ${sources.length} source${sources.length === 1 ? "" : "s"}`}
             {hiddenIds.size > 0 && ` · ${hiddenIds.size} hidden`}
           </span>
         </div>
@@ -545,21 +620,21 @@ export function PipelineSankey({
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`text-[11px] px-2.5 py-1 rounded font-mono-db transition-colors ${
+              className={`text-xs px-2.5 py-1 rounded font-mono-db transition-colors ${
                 range === r ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {r}
             </button>
           ))}
-          <span className="ml-2 inline-flex items-center gap-1.5 text-[11px] text-success border border-success/30 bg-success/10 rounded-full px-2.5 py-1">
+          <span className="ml-2 inline-flex items-center gap-1.5 text-xs text-success border border-success/30 bg-success/10 rounded-full px-2.5 py-1">
             <span className="w-1.5 h-1.5 rounded-full bg-success live-pulse-dot" />
             Live
           </span>
         </div>
       </div>
 
-      <div className="grid border-b border-border" style={{ gridTemplateColumns: `repeat(${STAGES.length}, 1fr)` }}>
+      <div className="grid border-b border-border" style={{ gridTemplateColumns: `repeat(${STAGES.length}, minmax(0, 1fr))` }}>
         {STAGES.map((st, i) => {
           const vol = totalIn * st.factor;
           const prev = i > 0 ? totalIn * STAGES[i - 1].factor : null;
@@ -571,22 +646,17 @@ export function PipelineSankey({
               label={st.label}
               badge={st.ruleCategory ? `${ruleCountFor(rules, sourceIds, st.ruleCategory)} rules` : undefined}
             >
-              <p className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-lg font-mono-db text-foreground">{fmtEps(vol)}</span>
-                <ContextualHelpTip content="Events per second, how many individual log records are moving through this stage right now.">
-                  <span className="text-[10px] font-mono-db text-muted-foreground border-b border-dotted border-muted-foreground/50">
-                    eps
-                  </span>
-                </ContextualHelpTip>
-                <span className="text-[10px] font-mono-db text-muted-foreground/70">{st.latency}</span>
-              </p>
-              {/* The raw data-volume figure is what actually lands with a
-                  security engineer used to thinking in GB/day, not eps alone. */}
-              <p className="text-[10px] font-mono-db text-muted-foreground/80 mt-0.5">{fmtGb(vol)}/day</p>
+              {/* The total for the selected range is the headline; the rate
+                  underneath answers "is it flowing right now?". */}
+              <ContextualHelpTip content={`Events through this stage in the last ${RANGE_WORDS[range] ?? range}, then their size. The third line is the rate right now.`}>
+                <span className="mt-1 block text-lg font-mono-db text-foreground">{eventsPerGb > 0 ? fmtCount(vol * eventsPerGb) : fmtEps(vol)}</span>
+              </ContextualHelpTip>
+              <p className="text-xs font-mono-db text-muted-foreground/80 truncate">{fmtSize(vol)}</p>
+              {rateIn > 0 && <p className="text-xs font-mono-db text-muted-foreground/60 truncate">≈{fmtCount(rateIn * st.factor)}/min now</p>}
               {prev && prev > vol ? (
-                <p className="text-[11px] text-success font-mono-db mt-0.5">↓ {Math.round((1 - vol / prev) * 100)}% reduced</p>
+                <p className="text-xs text-success font-mono-db mt-0.5 truncate">↓ {Math.round((1 - vol / prev) * 100)}% reduced</p>
               ) : (
-                <p className="text-[11px] text-muted-foreground mt-0.5">{st.sub}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{st.sub}</p>
               )}
             </StageTile>
           );
@@ -603,7 +673,7 @@ export function PipelineSankey({
         className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-b border-border bg-muted/5 hover:bg-muted/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ShieldCheck className="w-3.5 h-3.5 text-info shrink-0" aria-hidden="true" />
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           <span className="font-mono-db text-info">{ruleCountFor(rules, sourceIds, "Compliance-safe exclusions")}</span> compliance guardrails
           keep matching events exempt from every rule above, always forwarded in full
         </span>
@@ -618,7 +688,7 @@ export function PipelineSankey({
         {onManageRouting && (
           <button
             onClick={() => onManageRouting()}
-            className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground border border-border rounded px-2.5 py-1 bg-card/80 backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border border-border rounded px-2.5 py-1 bg-card/80 backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Shuffle className="w-3 h-3" aria-hidden="true" />
             Manage routing
@@ -652,7 +722,7 @@ export function PipelineSankey({
           {onAddSource && (
             <button
               onClick={onAddSource}
-              className="h-[46px] rounded border border-dashed border-primary/40 bg-primary/[0.04] text-[13px] font-medium text-primary hover:text-primary hover:border-primary hover:bg-primary/10 transition-colors inline-flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-[46px] rounded border border-dashed border-primary/40 bg-primary/[0.04] text-sm font-medium text-primary hover:text-primary hover:border-primary hover:bg-primary/10 transition-colors inline-flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="w-3.5 h-3.5" /> Add source
             </button>
@@ -662,7 +732,7 @@ export function PipelineSankey({
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={H} aria-hidden="true" style={{ display: "block" }}>
           <defs>
               {visible.map((s) => (
-                <linearGradient key={s.id} id={`${uid}-g-${s.id}`} gradientUnits="userSpaceOnUse" x1={COL_W} y1="0" x2={W - COL_W} y2="0">
+                <linearGradient key={s.id} id={`${uid}-g-${svgId(s.id)}`} gradientUnits="userSpaceOnUse" x1={COL_W} y1="0" x2={W - COL_W} y2="0">
                   <stop offset="0%" stopColor={s.color} stopOpacity="0.9" />
                   <stop offset="30%" stopColor="var(--db-blue)" stopOpacity="0.7" />
                   <stop offset="70%" stopColor="var(--db-cyan-dark)" stopOpacity="0.65" />
@@ -681,7 +751,7 @@ export function PipelineSankey({
                 return (
                   <linearGradient
                     key={`${e.sourceId}-${e.destId}`}
-                    id={`${uid}-e-${e.sourceId}-${e.destId}`}
+                    id={`${uid}-e-${svgId(e.sourceId)}-${svgId(e.destId)}`}
                     gradientUnits="userSpaceOnUse"
                     x1={stageX[STAGES.length - 1]}
                     y1="0"
@@ -802,7 +872,7 @@ export function PipelineSankey({
                       <path
                         key={`e-${t}`}
                         d={ribbon(COL_W, rowStrand.top, rowStrand.bottom, stageX[0], a.top, a.bottom)}
-                        fill={`url(#${uid}-g-${s.id})`}
+                        fill={`url(#${uid}-g-${svgId(s.id)})`}
                         fillOpacity={dim ? 0.08 : isAct ? 0.9 : 0.5}
                         stroke={s.color}
                         strokeWidth={isAct ? 0.8 : 0.3}
@@ -818,7 +888,7 @@ export function PipelineSankey({
                         <path
                           key={`${i}-${t}`}
                           d={ribbon(stageX[i], a.top, a.bottom, stageX[i + 1], b.top, b.bottom)}
-                          fill={`url(#${uid}-g-${s.id})`}
+                          fill={`url(#${uid}-g-${svgId(s.id)})`}
                           fillOpacity={dim ? 0.08 : isAct ? 0.9 : 0.5}
                           stroke={s.color}
                           strokeWidth={isAct ? 0.8 : 0.3}
@@ -882,7 +952,7 @@ export function PipelineSankey({
               return (
                 <g key={d.id}>
                   {contributors.map((s) => {
-                    const segVol = s.volume * rangeFactor * kept;
+                    const segVol = s.volume * scale * kept;
                     const thinH = Math.max(total > 0 ? (segVol / total) * DEST_THIN : 1, 1);
                     const top = thinY;
                     const bottom = thinY + thinH;
@@ -895,7 +965,7 @@ export function PipelineSankey({
                       <path
                         key={`${s.id}-${d.id}`}
                         d={ribbon(stageX[STAGES.length - 1], srcSeg.top, srcSeg.bottom, W - COL_W, top, bottom)}
-                        fill={`url(#${uid}-e-${s.id}-${d.id})`}
+                        fill={`url(#${uid}-e-${svgId(s.id)}-${svgId(d.id)})`}
                         fillOpacity={dim ? 0.08 : isAct ? 0.85 : 0.6}
                         stroke={s.color}
                         strokeWidth={isAct ? 0.8 : 0.3}
@@ -922,10 +992,12 @@ export function PipelineSankey({
           {destInflows.map(({ dest: d, total }) => (
             <FlowRow
               key={d.id}
-              node={{ ...d, volume: total }}
+              node={{ ...d, volume: total, total: eventsPerGb > 0 ? { gb: total, events: total * eventsPerGb } : undefined }}
               side="destination"
               pct={totalDelivered > 0 ? ((total / totalDelivered) * 100).toFixed(0) : "0"}
-              dim={total <= 0}
+              dim={total <= 0 || (selectedDestinationId != null && selectedDestinationId !== d.id)}
+              active={selectedDestinationId === d.id}
+              onSelect={onDestinationClick ? () => onDestinationClick(d.id) : undefined}
               onDisconnect={onDisconnectDestination ? () => setPendingDisconnect({ node: d, kind: "destination" }) : undefined}
               onRoute={onManageRouting ? () => onManageRouting({ destId: d.id }) : undefined}
             />
@@ -933,7 +1005,7 @@ export function PipelineSankey({
           {onAddDestination && (
             <button
               onClick={onAddDestination}
-              className="h-[46px] rounded border border-dashed border-primary/40 bg-primary/[0.04] text-[13px] font-medium text-primary hover:text-primary hover:border-primary hover:bg-primary/10 transition-colors inline-flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-[46px] rounded border border-dashed border-primary/40 bg-primary/[0.04] text-sm font-medium text-primary hover:text-primary hover:border-primary hover:bg-primary/10 transition-colors inline-flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="w-3.5 h-3.5" /> Add destination
             </button>
@@ -1001,26 +1073,26 @@ export function PipelineSankey({
       <div className="px-5 py-2.5 border-t border-border flex items-center justify-between gap-6">
         <button
           onClick={onManageColdStorage}
-          className={`inline-flex items-center gap-1.5 text-[11px] font-mono-db truncate transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${
+          className={`inline-flex items-center gap-1.5 text-xs truncate transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${
             coldStorageTargetCount > 0 ? "text-muted-foreground hover:text-foreground" : "text-amber-300 hover:text-amber-200"
           }`}
         >
           <Archive className={`w-3 h-3 shrink-0 ${coldStorageTargetCount > 0 ? "text-muted-foreground" : "text-amber-400"}`} aria-hidden="true" />
           {coldStorageTargetCount > 0 ? (
             <>
-              <span className="text-foreground">{fmtGb(totalIn * reductionFactor)}/day</span> filtered to{" "}
+              <span className="text-foreground font-mono-db">{fmtSize(totalIn * reductionFactor)}</span> filtered in {range} to{" "}
               {coldStorageTargetCount === 1 ? "cold storage" : `${coldStorageTargetCount} cold storage targets`} ·{" "}
               <span className="text-foreground font-medium underline underline-offset-2">Manage</span>
             </>
           ) : (
             <>
-              <span>{fmtGb(totalIn * reductionFactor)}/day</span> filtered, not retained ·{" "}
+              <span className="font-mono-db">{fmtSize(totalIn * reductionFactor)}</span> filtered in {range}, not retained ·{" "}
               <span className="text-foreground font-medium underline underline-offset-2">Connect cold storage</span>
             </>
           )}
         </button>
-        <p className="text-[11px] font-mono-db text-muted-foreground whitespace-nowrap shrink-0">
-          {fmtGb(totalIn)}/day in → <span className="text-success">{fmtGb(totalIn * kept)}/day delivered</span>
+        <p className="text-xs font-mono-db text-muted-foreground whitespace-nowrap shrink-0">
+          {fmtSize(totalIn)} in → <span className="text-success">{fmtSize(totalIn * kept)} delivered</span> · {range}
         </p>
       </div>
     </div>

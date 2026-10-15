@@ -1,3 +1,18 @@
+import type { Incident } from "@/app/data/fleet";
+import { fmtDuration } from "./environment";
+
+/** Anything with an open incident, source or destination. */
+export interface TriageSubject {
+  kind: "source" | "destination";
+  name: string;
+  label?: string;
+  state: string;
+  sinceMin: number;
+  /** GB/day normally arriving (sources) or sent (destinations). */
+  gbPerDay: number;
+  incident?: Incident;
+}
+
 interface ReplyContext {
   coldStorageConnected: boolean;
   /** The log-type question wording is now shared by two wizards (Palo Alto,
@@ -10,7 +25,7 @@ interface ReplyContext {
    * config problem) than a destination (a credential or endpoint problem),
    * naming firewall rules to someone stuck connecting Sentinel would be
    * actively wrong, not just unhelpful. */
-  connectorKind?: "source" | "destination";
+  connectorKind?: "source" | "destination" | "notification";
 }
 
 /**
@@ -20,6 +35,10 @@ interface ReplyContext {
  * not a production AI backend.
  */
 const RULES: Array<{ match: RegExp; reply: string | ((ctx: ReplyContext) => string) }> = [
+  { match: /which alerts should go|go to (slack|teams|pagerduty|opsgenie|email|webhook)/i, reply: "Page people only for critical: data not arriving or not landing. Send critical and high to your team channel, and keep medium and low for a daily email digest, so the channel stays worth reading." },
+  { match: /critical and high|difference between critical/i, reply: "Critical means data coming in or going out is affected right now, a source stopped or a destination is refusing data. High means processing is holding up delivery, data is late or partly failing, but still moving." },
+  { match: /message look like/i, reply: "One message per problem: what's wrong, since when, the likely cause and a link straight to its triage, plus an I'm on it button. When it gets worse or recovers, that same message is updated rather than a new one sent." },
+  { match: /who gets notified/i, reply: "Whoever is in the channel you pick, plus the team that owns the affected source if 'Also notify the owning team' is on. You can change both on the Notifications page any time." },
   { match: /hostname|serial/i, reply: "It's on the firewall's Dashboard tab in PAN-OS, top left, or run `show system info` from the CLI. Any hostname that resolves works, I only use it to label the source." },
   { match: /tenant domain|tenant/i, reply: "Your Entra ID tenant domain looks like acme.onmicrosoft.com. It's in the Azure portal under Microsoft Entra ID, Overview. Or just sign in and I'll read it from the token." },
   { match: /workspace name|workspace/i, reply: "In the Azure portal, Log Analytics workspaces, it's the name of the workspace your Sentinel instance sits on. Signing in with OAuth means you can pick it from a list instead of typing it." },
@@ -68,12 +87,55 @@ const RULES: Array<{ match: RegExp; reply: string | ((ctx: ReplyContext) => stri
 const FALLBACK =
   "I don't have that one to hand. Every field on this screen has an inline hint next to its label, and nothing is sent anywhere until you finish the last step, so it's safe to try a value and adjust.";
 
+/** Health questions are answered from the live incident, not a keyword
+ * table: "why did it stop" has a different, specific answer for every
+ * source, and Cruz already did the investigation. Returns null when the
+ * question isn't about a current health problem. */
+function healthReply(text: string, subjects: TriageSubject[]): string | null {
+  const t = text.toLowerCase();
+  const open = subjects.filter((s) => (s.state === "stopped" || s.state === "degraded") && s.incident);
+  if (open.length === 0) return null;
+
+  if (/what did i miss|missed|lost|gap/.test(t)) {
+    const lines = open
+      .filter((s) => s.incident!.area === "ingest" || s.incident!.area === "delivery")
+      .map((s) => {
+        const inc = s.incident!;
+        const share = inc.area === "delivery" ? (inc.rejectedPct ?? 100) / 100 : 1 - (inc.receivedFactor ?? 0);
+        const gb = ((s.gbPerDay * s.sinceMin) / 1440) * share;
+        const verb = inc.area === "delivery" ? "held back from" : "missed from";
+        return `about ${Math.round(gb)} GB ${verb} ${s.name} over ${fmtDuration(s.sinceMin)}, ${
+          inc.backfill.available ? "recoverable once it's fixed" : "not recoverable, syslog has no replay"
+        }`;
+      });
+    if (lines.length === 0) return null;
+    return `So far: ${lines.join("; ")}. Searches covering those windows are flagged as incomplete, so nobody reads a gap as "nothing happened."`;
+  }
+
+  const named = open.find((s) => t.includes(s.name.toLowerCase()) || (s.label && t.includes(s.label.toLowerCase())));
+  if (named && /why|stop|degrad|down|cause|what happened|fix|check|reject/.test(t)) {
+    const inc = named.incident!;
+    const likely = inc.causes.find((c) => c.likelihood === "Most likely") ?? inc.causes[0];
+    const ruledOut = inc.causes.filter((c) => c.likelihood === "Ruled out");
+    const next = inc.action
+      ? `If that doesn't explain it, I can ${inc.action.label.charAt(0).toLowerCase()}${inc.action.label.slice(1)} from its panel, which only changes Databahn's side.`
+      : "Once you've checked, run a health check from its panel and I'll confirm the moment data arrives.";
+    return `My first pass on ${named.name}. Most likely: ${likely.cause}. ${likely.evidence}${
+      ruledOut.length ? ` Ruled out: ${ruledOut.map((c) => c.cause).join(", ")}.` : ""
+    } Check first: ${inc.checks[0]}. ${next}`;
+  }
+  return null;
+}
+
 export function cruzRespond(
   userText: string,
   coldStorageConnected = false,
   connectorName?: string,
-  connectorKind?: "source" | "destination",
+  connectorKind?: "source" | "destination" | "notification",
+  subjects: TriageSubject[] = [],
 ): string {
+  const health = healthReply(userText, subjects);
+  if (health) return health;
   const hit = RULES.find((r) => r.match.test(userText));
   if (!hit) return FALLBACK;
   return typeof hit.reply === "function" ? hit.reply({ coldStorageConnected, connectorName, connectorKind }) : hit.reply;

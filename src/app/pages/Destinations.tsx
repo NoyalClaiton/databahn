@@ -11,6 +11,7 @@ import { VendorLogo, hasVendorLogo, chipSafeColor } from "@/app/components/share
 import { Checkbox } from "@/app/components/ui/checkbox";
 import { Button } from "@/app/components/ui/button";
 import { useSession } from "@/app/lib/SessionContext";
+import { useEnvironment, connectorSummary, fmtSize, type ConnectorSummary } from "@/app/lib/environment";
 import { buildConnectorLiveState } from "@/app/lib/pipelineData";
 
 const BUILT_IN_ROUTES: Record<string, string> = {
@@ -19,6 +20,36 @@ const BUILT_IN_ROUTES: Record<string, string> = {
 };
 
 type Tab = "all" | "connected";
+
+
+/** For a type connected as part of the sample environment: the manage
+ * dialog reports live state and leads to Pipeline, since "edit
+ * configuration" of 18 accounts at once isn't one thing. */
+function sampleManageCopy(s: ConnectorSummary | undefined, isSource: boolean) {
+  if (!s || s.fromSession) return undefined;
+  return {
+    configuration: (isSource
+      ? [
+          ["Connected", `${s.count} source${s.count === 1 ? "" : "s"}`],
+          ["Not sending", String(s.stopped)],
+          ["Below normal", String(s.degraded)],
+          ["Volume", `${fmtSize(s.gbPerDay)}/day`],
+        ]
+      : [
+          ["Status", s.state ?? "healthy"],
+          ["Sources routed", String(s.sourcesRouted ?? 0)],
+          ["Volume", `${fmtSize(s.gbPerDay)}/day`],
+        ]) as [string, string][],
+    manageLabel: "View in Pipeline",
+    status: (s.stopped
+      ? { label: isSource ? `${s.stopped} not sending` : "Not accepting", tone: "bad" }
+      : s.degraded
+        ? { label: isSource ? `${s.degraded} below normal` : "Rejecting some", tone: "warn" }
+        : s.state === "recovering"
+          ? { label: "Recovering", tone: "info" }
+          : { label: "Healthy", tone: "good" }) as { label: string; tone: "good" | "warn" | "bad" | "info" },
+  };
+}
 
 export default function Destinations() {
   const navigate = useNavigate();
@@ -35,6 +66,9 @@ export default function Destinations() {
   const { isConnected, disconnectEntity, connected, routes, rules, addRoute } = useSession();
   const liveByConnector = buildConnectorLiveState(connected, routes, rules);
   const pendingDef = CONNECTORS.find((c) => c.id === pending) ?? null;
+  const summary = connectorSummary(useEnvironment());
+  const pendingSummary = pending ? summary[pending] : undefined;
+  const sampleOnly = Boolean(pendingSummary && !pendingSummary.fromSession);
 
   const connectedDestinations = connected.filter((c) => c.kind === "destination");
   // Already routed to the pending source doesn't need to be offered again,
@@ -172,14 +206,24 @@ export default function Destinations() {
 
       <ConnectModal
         connector={pendingDef}
-        isConnected={Boolean(pendingDef && isConnected(pendingDef.name))}
-        onDisconnect={(id) => {
-          disconnectEntity(id);
-          setPending(null);
-        }}
+        isConnected={Boolean(pendingDef && (isConnected(pendingDef.name) || pendingSummary))}
+        // Sample sources aren't this session's to disconnect.
+        onDisconnect={
+          sampleOnly
+            ? undefined
+            : (id) => {
+                disconnectEntity(id);
+                setPending(null);
+              }
+        }
+        copy={sampleManageCopy(pendingSummary, false)}
         onClose={() => setPending(null)}
         onContinue={(id) => {
           setPending(null);
+          if (sampleOnly) {
+            navigate("/pipeline", { state: { search: undefined } });
+            return;
+          }
           navigate(BUILT_IN_ROUTES[id] ?? `/destinations/connect/${id}`, { state: { returnTo, pendingSourceId } });
         }}
       />

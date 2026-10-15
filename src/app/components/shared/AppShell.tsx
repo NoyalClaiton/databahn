@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Database, Send, Waypoints, Search, Share2, ListFilter,
   LogOut, UserRound, HelpCircle, PanelLeftClose, PanelLeftOpen,
-  RotateCcw, X, Settings, Radio,
+  RotateCcw, X, Settings, Bell, ChevronDown, BellRing, FlaskConical, ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { GuidedTourOverlay } from "./GuidedTourOverlay";
@@ -13,6 +13,10 @@ import { IntroSplash } from "./IntroSplash";
 import { CruzAssistant } from "./CruzAssistant";
 import { ContextualHelpTip } from "./ContextualHelpTip";
 import { useSession } from "@/app/lib/SessionContext";
+import { useEnvironment, fmtAgo, type AlertTarget, type SourceView } from "@/app/lib/environment";
+import { HealthDot, HEALTH_META, SEVERITY_META } from "./HealthBadge";
+import { whereAlertsGo } from "@/app/lib/notifications";
+import { SAMPLE_FLEET } from "@/app/data/fleet";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -39,179 +43,200 @@ const NAV_GROUPS = [
       { to: "/rules", label: "Rules", icon: ListFilter },
     ],
   },
+  {
+    // About the team, not the data: where alerts reach people who aren't
+    // looking at Databahn.
+    label: "Manage",
+    items: [{ to: "/notifications", label: "Notifications", icon: BellRing }],
+  },
 ];
 
-function ConnectedStatusStrip({ collapsed }: { collapsed: boolean }) {
-  const { connected, routes, hiddenIds } = useSession();
-  if (connected.length === 0) return null;
+/**
+ * Pipeline status, always in view: how things are right now. Its sibling,
+ * the bell, says what happened. Lived at the bottom of the sidebar before,
+ * where it shrank to an icon whenever the nav collapsed and listed every
+ * source one by one, which stopped working past a handful.
+ *
+ * Counts problems at both ends of the pipe (sources not sending, below
+ * normal or not routed; destinations not accepting everything) and opens
+ * a short list, each item leading straight to its detail panel.
+ */
+/** A small dot with a soft halo; the halo is what makes "down" noticeable,
+ * not a red fill across the whole control. */
+function StatusDot({ tone }: { tone: "good" | "warn" | "bad" }) {
+  const c = { good: "bg-success", warn: "bg-amber-500", bad: "bg-destructive" }[tone];
+  const halo = { good: "", warn: "shadow-[0_0_0_3px_rgba(245,158,11,0.18)]", bad: "shadow-[0_0_0_3px_rgba(229,72,77,0.22)]" }[tone];
+  return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c} ${halo}`} aria-hidden="true" />;
+}
 
-  const sources = connected.filter((c) => c.kind === "source");
-  const dests = connected.filter((c) => c.kind === "destination");
+function StatusPill() {
+  const env = useEnvironment();
+  const navigate = useNavigate();
+  const { sampleEnvironment } = useSession();
+  if (env.sources.length === 0) return null;
 
-  // Pipeline overview falls back to a full mesh (everything reaches
-  // everything) until the first explicit route exists, so this strip has to
-  // agree with that same rule, otherwise a source shows "live" here while
-  // Pipeline is telling the truth that it's actually going nowhere.
-  const hasExplicitRouting = routes.length > 0;
-  const sourceRouted = (id: string) => !hasExplicitRouting || routes.some((r) => r.sourceId === id);
-  const destReceiving = (id: string) => !hasExplicitRouting || routes.some((r) => r.destId === id);
+  const stopped = env.sources.filter((s) => s.state === "stopped").sort((a, b) => b.lastEventMin - a.lastEventMin);
+  const below = env.sources.filter((s) => s.state === "degraded");
+  const unrouted = env.destinations.length > 0 ? env.sources.filter((s) => s.destIds.length === 0) : [];
+  const destProblems = env.destinations.filter((d) => d.state === "stopped" || d.state === "degraded");
+  const { counts, total } = env.summary;
 
-  if (collapsed) {
-    // A dot per entity stopped scaling the moment there were more than two
-    // of a kind, the extras just silently disappeared off the slice, and
-    // hovering the right one out of a growing stack only gets harder from
-    // here. One trigger, one list, works the same at 4 connections or 40.
-    const anyIssue = sources.some((e) => !sourceRouted(e.id)) || dests.some((e) => !destReceiving(e.id));
+  const parts = [
+    stopped.length && `${stopped.length} source${stopped.length === 1 ? "" : "s"} not sending`,
+    destProblems.length && `${destProblems.length} destination${destProblems.length === 1 ? "" : "s"} failing`,
+    !stopped.length && below.length && `${below.length} below normal`,
+    !stopped.length && !below.length && unrouted.length && `${unrouted.length} not routed`,
+  ].filter(Boolean) as string[];
+  const label = parts.length ? parts.join(" · ") : total === 1 ? "1 source sending" : `All ${total} sources sending`;
+  // What the pill shows: the count first, a short label, and its own dot.
+  const destStopped = destProblems.some((d) => d.state === "stopped");
+  const segments: { n: number; label: string; tone: "bad" | "warn" }[] = [
+    ...(stopped.length ? [{ n: stopped.length, label: `source${stopped.length === 1 ? "" : "s"} down`, tone: "bad" as const }] : []),
+    ...(below.length ? [{ n: below.length, label: "below normal", tone: "warn" as const }] : []),
+    ...(destProblems.length
+      ? [{ n: destProblems.length, label: `destination${destProblems.length === 1 ? "" : "s"}`, tone: destStopped ? ("bad" as const) : ("warn" as const) }]
+      : []),
+    ...(!stopped.length && !below.length && unrouted.length ? [{ n: unrouted.length, label: "not routed", tone: "warn" as const }] : []),
+  ];
 
-    const StatusChip = ({ ok, okLabel, badLabel }: { ok: boolean; okLabel: string; badLabel: string }) => (
-      <span
-        className={`shrink-0 text-[11px] font-medium px-1.5 py-[1px] rounded ${
-          ok ? "bg-success/15 text-success" : "bg-amber-500/15 text-amber-400"
-        }`}
-      >
-        {ok ? okLabel : badLabel}
-      </span>
-    );
-
-    const summary = (
-      <div className="max-h-80 overflow-y-auto -m-1 p-1">
-        {/* The dot color alone was the only signal before, spelling out what
-            green vs amber actually means up front means the list below
-            doesn't have to be decoded row by row. */}
-        {anyIssue && (
-          <div className="flex items-center gap-3 mb-3 pb-2.5 border-b border-border/60 text-[11px]">
-            <span className="flex items-center gap-1.5 text-success"><span className="w-2 h-2 rounded-full bg-success shrink-0" /> Flowing</span>
-            <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" /> Needs a route</span>
-          </div>
-        )}
-        {sources.length > 0 && (
-          <div className="mb-3 last:mb-0">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Database className="w-3 h-3 text-muted-foreground/70" aria-hidden="true" />
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70 font-semibold">Sources</p>
-            </div>
-            <div className="space-y-1">
-              {sources.map((e) => {
-                const hidden = hiddenIds.includes(e.id);
-                const routed = sourceRouted(e.id);
-                return (
-                  <div key={e.id} className="flex items-center gap-2 py-0.5">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${hidden ? "bg-muted-foreground/40" : routed ? "bg-success" : "bg-amber-500"}`} />
-                    <span className={`text-[13px] font-medium truncate flex-1 ${hidden ? "text-muted-foreground/70" : "text-foreground"}`}>{e.name}</span>
-                    {hidden ? (
-                      <span className="shrink-0 text-[11px] font-medium px-1.5 py-[1px] rounded bg-muted-foreground/15 text-muted-foreground">Hidden</span>
-                    ) : (
-                      <StatusChip ok={routed} okLabel="Routed" badLabel="Not routed" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {dests.length > 0 && (
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Send className="w-3 h-3 text-muted-foreground/70" aria-hidden="true" />
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70 font-semibold">Destinations</p>
-            </div>
-            <div className="space-y-1">
-              {dests.map((e) => {
-                const receiving = destReceiving(e.id);
-                return (
-                  <div key={e.id} className="flex items-center gap-2 py-0.5">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${receiving ? "bg-info" : "bg-amber-500"}`} />
-                    <span className="text-foreground text-[13px] font-medium truncate flex-1">{e.name}</span>
-                    <StatusChip ok={receiving} okLabel="Receiving" badLabel="Empty" />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-
-    const issueCount = sources.filter((e) => !sourceRouted(e.id)).length + dests.filter((e) => !destReceiving(e.id)).length;
-    const totalCount = sources.length + dests.length;
-    // A bare icon gives no reason to hover it, the badge is what says "there's
-    // a number here, look closer": the issue count when something needs
-    // attention (the more useful, actionable number), the total otherwise.
-    const badgeCount = anyIssue ? issueCount : totalCount;
-
-    return (
-      <div className="px-2 py-3 border-t border-border flex justify-center">
-        <ContextualHelpTip content={summary} maxWidth={300}>
-          <div
-            role="status"
-            aria-label={`${sources.length} source${sources.length === 1 ? "" : "s"}, ${dests.length} destination${dests.length === 1 ? "" : "s"} connected${
-              anyIssue ? `, ${issueCount} not fully routed` : ""
-            }`}
-            className="relative w-7 h-7 rounded flex items-center justify-center hover:bg-muted/30 transition-colors cursor-default"
-          >
-            <Radio className={`w-3.5 h-3.5 ${anyIssue ? "text-amber-500" : "text-success"}`} aria-hidden="true" />
-            <span
-              className={`absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-[3px] rounded-full text-[9px] font-mono-db font-semibold flex items-center justify-center border-2 border-card ${
-                anyIssue ? "bg-amber-500 text-amber-950" : "bg-success text-success-foreground"
-              }`}
-            >
-              {badgeCount}
-            </span>
-          </div>
-        </ContextualHelpTip>
-      </div>
-    );
-  }
+  const go = (target: AlertTarget) => navigate("/", { state: { openTarget: target } });
+  const SourceItem = ({ s, line }: { s: SourceView; line: string }) => (
+    <DropdownMenuItem onSelect={() => go({ kind: "source", id: s.id, name: s.name })} className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer">
+      <HealthDot state={s.state} />
+      <span className="text-sm text-foreground truncate flex-1">{s.name}</span>
+      <span className="text-xs text-muted-foreground shrink-0">{line}</span>
+    </DropdownMenuItem>
+  );
+  const Heading = ({ children }: { children: ReactNode }) => (
+    <p className="px-3 pt-2.5 pb-1 text-xs uppercase tracking-wide text-muted-foreground/80">{children}</p>
+  );
 
   return (
-    <div className="px-3 py-3 border-t border-border">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Radio className="w-3 h-3 text-success" aria-hidden="true" />
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-medium">Live</p>
-      </div>
-      {sources.length > 0 && (
-        <div className="space-y-1.5 mb-2">
-          {sources.map((e) => {
-            const hidden = hiddenIds.includes(e.id);
-            const routed = sourceRouted(e.id);
-            return (
-              <div
-                key={e.id}
-                className="flex items-center gap-2"
-                title={hidden ? "Hidden from pipeline" : routed ? undefined : "Not routed to a destination"}
-              >
-                <div
-                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    hidden ? "bg-muted-foreground/40" : routed ? "bg-success live-pulse-dot" : "bg-amber-500"
-                  }`}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        {/* A neutral control like its neighbours (bell, help, settings).
+            Colour lives only in the small status dots; the counts carry the
+            weight, labels stay muted. It used to be a red-filled sentence,
+            which read like an error toast stuck in the header. */}
+        <button
+          aria-label={`Pipeline status: ${label}`}
+          className="group inline-flex items-center gap-3 h-8 rounded-full border border-border bg-card/60 pl-3 pr-2 text-xs transition-colors hover:bg-muted/30 hover:border-muted-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-muted/30"
+        >
+          {segments.length === 0 ? (
+            <span className="inline-flex items-center gap-2">
+              <StatusDot tone="good" />
+              <span className="text-foreground/85 whitespace-nowrap">All systems normal</span>
+            </span>
+          ) : (
+            segments.map((seg, i) => (
+              <span key={seg.label} className={`items-center gap-1.5 whitespace-nowrap ${i === 0 ? "inline-flex" : "hidden md:inline-flex"}`}>
+                <StatusDot tone={seg.tone} />
+                <span className="font-mono-db font-semibold text-foreground">{seg.n}</span>
+                <span className="hidden md:inline text-muted-foreground">{seg.label}</span>
+              </span>
+            ))
+          )}
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[360px] p-0">
+        <div className="px-3 py-2.5 border-b border-border">
+          <p className="text-sm font-medium">Pipeline status</p>
+          <p className="text-xs text-muted-foreground">
+            {total} source{total === 1 ? "" : "s"} · {env.destinations.length} destination{env.destinations.length === 1 ? "" : "s"}
+            {sampleEnvironment && " · sample environment, simulated data"}
+          </p>
+        </div>
+        <div className="max-h-[65vh] overflow-y-auto pb-1.5">
+          {stopped.length > 0 && (
+            <>
+              <Heading>Not sending · {stopped.length}</Heading>
+              {stopped.map((s) => (
+                <SourceItem key={s.id} s={s} line={`last event ${fmtAgo(s.lastEventMin)}`} />
+              ))}
+            </>
+          )}
+          {below.length > 0 && (
+            <>
+              <Heading>Below normal · {below.length}</Heading>
+              {below.map((s) => (
+                <SourceItem
+                  key={s.id}
+                  s={s}
+                  line={
+                    s.incident?.parseErrorPct
+                      ? `${s.incident.parseErrorPct}% failing to parse`
+                      : s.incident?.backlogMin
+                        ? `${s.incident.backlogMin} min behind`
+                        : `${Math.round((s.incident?.receivedFactor ?? 1) * 100)}% of normal`
+                  }
                 />
-                <span className={`text-xs truncate ${hidden ? "text-muted-foreground/40 line-through" : routed ? "text-foreground/70" : "text-muted-foreground/60"}`}>
-                  {e.name}
-                </span>
-              </div>
-            );
-          })}
+              ))}
+            </>
+          )}
+          {unrouted.length > 0 && (
+            <>
+              <Heading>Not routed · {unrouted.length}</Heading>
+              {unrouted.map((s) => (
+                <SourceItem key={s.id} s={s} line="no destination" />
+              ))}
+            </>
+          )}
+          {env.destinations.length > 0 && (
+            <>
+              <Heading>Destinations · {env.destinations.length}</Heading>
+              {env.destinations.map((d) => (
+                <DropdownMenuItem
+                  key={d.id}
+                  onSelect={() => go({ kind: "destination", id: d.id, name: d.name })}
+                  className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer"
+                >
+                  <HealthDot state={d.state} />
+                  <span className="text-sm text-foreground truncate flex-1">{d.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {d.state === "stopped"
+                      ? "not accepting"
+                      : d.state === "degraded"
+                        ? `rejecting ${d.incident?.rejectedPct}%`
+                        : d.state === "recovering"
+                          ? "recovering"
+                          : "accepting"}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+          {/* Few sources (a fresh walkthrough): list them all, it's still
+              short. At scale: the healthy majority is one line. */}
+          {total <= 8 ? (
+            <>
+              <Heading>Sources · {total}</Heading>
+              {env.sources
+                .filter((s) => !stopped.includes(s) && !below.includes(s) && !unrouted.includes(s))
+                .map((s) => (
+                  <SourceItem key={s.id} s={s} line={HEALTH_META[s.state].label.toLowerCase()} />
+                ))}
+            </>
+          ) : (
+            <p className="px-3 pt-2.5 text-xs text-muted-foreground flex items-center gap-2">
+              <HealthDot state="healthy" />
+              {counts.healthy} healthy
+              {counts.recovering > 0 && ` · ${counts.recovering} recovering`}
+              {counts.paused + counts.learning > 0 && ` · ${counts.paused + counts.learning} paused or learning`}
+            </p>
+          )}
         </div>
-      )}
-      {dests.length > 0 && (
-        <div className="space-y-1.5">
-          {dests.map((e) => {
-            const receiving = destReceiving(e.id);
-            return (
-              <div key={e.id} className="flex items-center gap-2" title={receiving ? undefined : "No source routed here yet"}>
-                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${receiving ? "bg-info/60" : "bg-amber-500"}`} />
-                <span className={`text-xs truncate ${receiving ? "text-muted-foreground" : "text-muted-foreground/60"}`}>{e.name}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+        <DropdownMenuSeparator className="m-0" />
+        <DropdownMenuItem onSelect={() => navigate("/pipeline")} className="px-3 py-2 text-xs text-primary cursor-pointer">
+          All sources and destinations on Pipeline
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const { resetSession } = useSession();
+  const { resetSession, sampleEnvironment, setSampleEnvironment } = useSession();
   const navigate = useNavigate();
 
   return (
@@ -240,7 +265,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
         <section>
-          <p className="text-[11px] uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Account</p>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Account</p>
           <div className="flex items-center gap-3 p-3 rounded border border-border bg-card/40">
             <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
               JR
@@ -252,36 +277,44 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           </div>
         </section>
 
+        {/* Theme and density were display-only rows that looked like
+            settings but did nothing; removed rather than left as dead ends. */}
+
         <section>
-          <p className="text-[11px] uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Display</p>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between py-2.5 px-3 rounded border border-border bg-card/20">
-              <span className="text-sm text-foreground">Theme</span>
-              <span className="text-xs text-muted-foreground font-mono-db">Dark</span>
-            </div>
-            <div className="flex items-center justify-between py-2.5 px-3 rounded border border-border bg-card/20">
-              <span className="text-sm text-foreground">Density</span>
-              <span className="text-xs text-muted-foreground font-mono-db">Comfortable</span>
-            </div>
-          </div>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Notifications</p>
+          {/* These were placeholder switches; the real settings live on their
+              own page, where channels and routing can actually be set. */}
+          <button
+            onClick={() => {
+              navigate("/notifications");
+              onClose();
+            }}
+            className="w-full text-left py-2.5 px-3 rounded border border-border bg-card/20 text-sm text-foreground hover:border-border/80 transition-colors flex items-center justify-between"
+          >
+            Channels and alert routing
+            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
         </section>
 
         <section>
-          <p className="text-[11px] uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Notifications</p>
-          <div className="space-y-1">
-            {["Pipeline alerts", "Source health", "Rule changes"].map((item) => (
-              <div key={item} className="flex items-center justify-between py-2.5 px-3 rounded border border-border bg-card/20">
-                <span className="text-sm text-foreground">{item}</span>
-                <div className="w-8 h-4 rounded-full bg-primary relative cursor-pointer">
-                  <div className="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <p className="text-[11px] uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Demo</p>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground/50 font-medium mb-3">Demo</p>
+          <button
+            role="switch"
+            aria-checked={sampleEnvironment}
+            onClick={() => setSampleEnvironment(!sampleEnvironment)}
+            className="w-full text-left py-2.5 px-3 mb-1 rounded border border-border bg-card/20 text-sm text-foreground hover:border-border/80 transition-colors flex items-center justify-between gap-3"
+          >
+            <span className="flex items-center gap-2">
+              <FlaskConical className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>
+                Sample environment
+                <span className="block text-xs text-muted-foreground">{SAMPLE_FLEET.length} simulated sources with realistic issues</span>
+              </span>
+            </span>
+            <span className={`w-8 h-4 rounded-full relative shrink-0 transition-colors ${sampleEnvironment ? "bg-primary" : "bg-muted"}`}>
+              <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${sampleEnvironment ? "right-0.5" : "left-0.5"}`} />
+            </span>
+          </button>
           <button
             onClick={() => { resetSession(); navigate("/"); onClose(); }}
             className="w-full text-left py-2.5 px-3 rounded border border-border bg-card/20 text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors flex items-center gap-2"
@@ -299,6 +332,117 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * The in-app half of "keep the user informed". The out-of-app half (Slack,
+ * email to the source owner) is what actually reaches someone who isn't
+ * looking; this is where those same alerts are waiting when they open the
+ * product, each one leading straight to the source, not to a generic page.
+ */
+function NotificationsBell() {
+  const env = useEnvironment();
+  const navigate = useNavigate();
+  const { notifications } = useSession();
+  const critTo = whereAlertsGo(notifications, "critical");
+  // Open alerts by severity, then recoveries, newest first within each.
+  // Recoveries are notifications too, so nobody keeps chasing a fixed one.
+  const alerts = [
+    ...env.summary.alerts.map((a) => ({
+      id: a.id,
+      severity: a.severity,
+      recovered: false,
+      title: a.title,
+      detail: a.likelyCause ? `Likely: ${a.likelyCause}` : a.detail,
+      minutesAgo: a.sinceMin,
+      acked: a.assignee ? (a.assignee.isMe ? "you're on it" : `${a.assignee.person.name} is on it`) : "",
+      timed: a.kind === "incident",
+      open: a.open,
+    })),
+    ...[
+      ...env.sources.map((x) => ({ x, kind: "source" as const })),
+      ...env.destinations.map((x) => ({ x, kind: "destination" as const })),
+    ]
+      .filter(({ x }) => x.state === "recovering" && x.recovered)
+      .map(({ x, kind }) => ({
+        id: `rec:${x.id}`,
+        severity: undefined,
+        recovered: true,
+        title: `${x.name} recovered`,
+        detail: "Watching for 30 minutes before marking healthy",
+        minutesAgo: x.sinceMin,
+        acked: "",
+        timed: true,
+        open: { kind, id: x.id, name: x.name },
+      })),
+  ];
+  const unread = env.summary.alerts.filter((a) => (a.severity === "critical" || a.severity === "high") && !a.ackAt).length;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label={unread ? `Notifications, ${unread} need attention` : "Notifications"}
+          title="Notifications"
+          className="relative w-8 h-8 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Bell className="w-4 h-4" />
+          {unread > 0 && (
+            <span className="absolute top-0.5 right-0.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-mono-db font-semibold flex items-center justify-center">
+              {unread}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[340px] p-0">
+        <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
+          <span className="text-sm font-medium">Alerts</span>
+          {/* The way into Notifications from here: a short action, not a
+              sentence. Where alerts currently go is a hover detail. */}
+          <button
+            onClick={() => navigate("/notifications")}
+            title={critTo ? `Critical alerts also go to ${critTo}` : "Alerts only show in Databahn"}
+            className={`inline-flex items-center gap-1 text-xs font-medium ${
+              critTo ? "text-muted-foreground hover:text-foreground" : "text-primary hover:text-primary/80"
+            }`}
+          >
+            {critTo ? "Notifications" : "Set up notifications"}
+            <ArrowRight className="w-3 h-3" aria-hidden="true" />
+          </button>
+        </div>
+        {alerts.length === 0 ? (
+          <p className="px-3 py-4 text-xs text-muted-foreground">No alerts. Every source and destination is healthy.</p>
+        ) : (
+          <div className="max-h-80 overflow-y-auto py-1">
+            {alerts.map((a) => (
+              <DropdownMenuItem
+                key={a.id}
+                onSelect={() => navigate("/", { state: { openTarget: a.open } })}
+                className="flex items-start gap-2.5 px-3 py-2 cursor-pointer"
+              >
+                <span className="mt-1.5">
+                  {a.severity ? (
+                    <span className={`block w-2 h-2 rounded-full ${SEVERITY_META[a.severity].dot}`} aria-hidden="true" />
+                  ) : (
+                    <HealthDot state="recovering" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-foreground leading-snug">{a.title}</span>
+                  <span className="block text-xs text-muted-foreground truncate">{a.detail}</span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    {a.severity ? SEVERITY_META[a.severity].label : "Recovered"}
+                    {a.timed ? ` · ${fmtAgo(a.minutesAgo)}` : ""}
+                    {a.acked && ` · ${a.acked}`}
+                  </span>
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </div>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -336,6 +480,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { resetSession } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
+  // Pages share one scrolling container, so without this a new page opened
+  // at the previous page's scroll depth: "Review rules" from far down the
+  // dashboard landed partway down the rules list. Runs before pages that
+  // then scroll to a specific spot themselves (they wait a tick).
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
 
   // Safety net: never let the tour stay blocked if the intro fails to report
   // completion for any reason. The intro can't run longer than this.
@@ -350,6 +502,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="relative z-10 h-14 shrink-0 border-b border-border flex items-center justify-between px-5 bg-card/40 backdrop-blur-sm">
         <DatabahnLogo />
         <div className="flex items-center gap-1">
+          <div className="mr-1.5">
+            <StatusPill />
+          </div>
+          <NotificationsBell />
           <button
             onClick={replayTour}
             aria-label="Replay product tour"
@@ -413,7 +569,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {NAV_GROUPS.map((group, groupIndex) => (
               <div key={group.label}>
                 {!navCollapsed && (
-                  <p className="px-3 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wide mb-1.5 whitespace-nowrap">
+                  <p className="px-3 text-xs font-medium text-muted-foreground/70 uppercase tracking-wide mb-1.5 whitespace-nowrap">
                     {group.label}
                   </p>
                 )}
@@ -459,7 +615,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             ))}
           </nav>
-          <ConnectedStatusStrip collapsed={navCollapsed} />
           <button
             onClick={toggleNav}
             aria-label={navCollapsed ? "Expand navigation" : "Collapse navigation"}
@@ -472,7 +627,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {!navCollapsed && <span className="text-xs whitespace-nowrap">Collapse</span>}
           </button>
         </motion.aside>
-        <main className="flex-1 px-6 lg:px-12 py-10 lg:py-14 overflow-y-auto">{children}</main>
+        <main ref={mainRef} className="flex-1 px-6 lg:px-12 py-10 lg:py-14 overflow-y-auto">{children}</main>
         <CruzAssistant />
       </div>
       {/* Auto-start only from the dashboard, not on every first visit

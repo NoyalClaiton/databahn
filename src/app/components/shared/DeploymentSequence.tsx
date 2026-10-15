@@ -157,7 +157,7 @@ function StepRow({
           {subStatus}
         </p>
         {running && (
-          <p className="text-[11px] text-muted-foreground/60 mt-0.5">{step.expected}</p>
+          <p className="text-xs text-muted-foreground/60 mt-0.5">{step.expected}</p>
         )}
       </div>
     </li>
@@ -257,7 +257,7 @@ export function DeploymentSequence({
     <div className="rounded border border-border glass-card p-5">
       <div className="flex items-center justify-between gap-3 mb-4">
         <LiveStatus label={headerText} tone={headerTone} />
-        <span className="font-mono-db text-[11px] text-muted-foreground/70 tabular-nums">
+        <span className="font-mono-db text-xs text-muted-foreground/70 tabular-nums">
           {Math.min(activeIndex, steps.length)}/{steps.length}
         </span>
       </div>
@@ -278,7 +278,7 @@ export function DeploymentSequence({
       <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-3">
         {/* Persistent, not a one-off toast: the compression claim has to stay
             visible for as long as the compressed timings are on screen. */}
-        <p className="text-[11px] text-muted-foreground/70 leading-snug">
+        <p className="text-xs text-muted-foreground/70 leading-snug">
           {compressed ? (
             <>
               Demo speed <span className="font-mono-db text-muted-foreground">{speed}x</span>. In production this

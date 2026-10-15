@@ -13,6 +13,7 @@ import { CONNECTORS } from "@/app/data/connectors";
 import { Checkbox } from "@/app/components/ui/checkbox";
 import { Button } from "@/app/components/ui/button";
 import { useSession } from "@/app/lib/SessionContext";
+import { useEnvironment, clockAt } from "@/app/lib/environment";
 
 /** "Evaluated" has to hold for whichever destination actually saw this event,
  * not just whichever one or two happened to get named in a conditional.
@@ -255,8 +256,11 @@ function FlagForDetectionModal({
   onClose: () => void;
   onSubmitted: (ruleId: string) => void;
 }) {
-  const { connected, addRule } = useSession();
-  const sources = connected.filter((c) => c.kind === "source");
+  const { addRule } = useSession();
+  // One entry per connected source type, from the environment (sample
+  // included). An exclusion applies to a type of source, not one instance.
+  const env = useEnvironment();
+  const sources = Array.from(new Map(env.sources.map((s) => [s.connectorId, { id: s.connectorId, name: s.vendor }])).values());
   const originId = CONNECTORS.find((c) => c.name === result.source)?.id;
   const [selected, setSelected] = useState<string[]>(originId ? [originId] : []);
 
@@ -330,7 +334,7 @@ function FlagForDetectionModal({
               >
                 <Checkbox checked={checked} className="pointer-events-none" />
                 <span className="text-sm text-foreground">{s.name}</span>
-                {s.name === result.source && <span className="text-[10px] text-muted-foreground ml-auto">source of this event</span>}
+                {s.name === result.source && <span className="text-xs text-muted-foreground ml-auto">source of this event</span>}
               </button>
             );
           })}
@@ -359,7 +363,12 @@ const EXAMPLE_QUERIES = [
 
 export default function SearchExperience() {
   const navigate = useNavigate();
-  const { connected, coldStorageTargets } = useSession();
+  const { coldStorageTargets } = useSession();
+  const env = useEnvironment();
+  const sourceCount = env.sources.length;
+  // Sources that weren't sending during the search window. Their silence is
+  // missing data, not an absence of activity, and the results have to say so.
+  const gaps = env.summary.issues.filter((s) => s.state === "stopped" || s.state === "degraded");
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"parsed" | "raw">("parsed");
   const [status, setStatus] = useState<"idle" | "searching" | "done">("idle");
@@ -374,7 +383,7 @@ export default function SearchExperience() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [flaggingResult, setFlaggingResult] = useState<SearchResult | null>(null);
 
-  if (connected.length === 0) {
+  if (sourceCount === 0) {
     return (
       <div className="w-full max-w-[1180px] mx-auto">
         <EmptyState
@@ -404,7 +413,14 @@ export default function SearchExperience() {
     setExpandedId(null);
     setSeverityFilter(null);
 
-    const sourceNames = connected.map((c) => c.name);
+    // At scale, progress per source type; 170 rows of per-source progress
+    // would be the wait itself.
+    const sourceNames =
+      sourceCount > 8
+        ? Array.from(new Set(env.sources.map((src) => src.group))).map(
+            (g) => `${g} sources (${env.sources.filter((src) => src.group === g).length})`,
+          )
+        : env.sources.map((src) => src.name);
     const initialProgress = sourceNames.map((name, idx) => ({
       source: name,
       state: idx === 0 ? ("active" as const) : ("pending" as const),
@@ -433,7 +449,7 @@ export default function SearchExperience() {
     <div className="w-full max-w-[1180px] mx-auto">
       <PageHeader
         title="Ask anything, anywhere"
-        subtitle={`Search across your ${connected.length} connected source${connected.length === 1 ? "" : "s"}. Results include data filtered through active rules.`}
+        subtitle={`Search across your ${sourceCount} connected source${sourceCount === 1 ? "" : "s"}. Results include data filtered through active rules.`}
       />
 
       <form
@@ -452,15 +468,37 @@ export default function SearchExperience() {
 
       {status === "searching" && <PerSourceProgress sources={progress} />}
 
+      {status === "done" && gaps.length > 0 && (
+        <div className="flex items-start justify-between gap-3 mb-2 px-3 py-2 rounded-lg border border-border bg-card shadow-[inset_2px_0_0_var(--db-red)]" role="status">
+          <div className="text-xs text-foreground/90">
+            <p className="font-medium text-foreground">Results may be incomplete</p>
+            <p className="mt-0.5 text-muted-foreground">
+              {gaps
+                .slice(0, 3)
+                .map((g) => `${g.name} (${g.state === "stopped" ? "no data" : "partial data"} since ${clockAt(g.sinceMin)})`)
+                .join(", ")}
+              {gaps.length > 3 && ` and ${gaps.length - 3} more`}. No results from these sources in those windows means no data, not no
+              activity.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/")}
+            className="text-xs font-medium text-primary hover:text-primary/80 underline underline-offset-2 shrink-0"
+          >
+            View source health
+          </button>
+        </div>
+      )}
+
       {status === "done" && hiddenColdStorageCount > 0 && (
-        <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/5">
-          <p className="text-xs text-amber-300">
+        <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-lg border border-border bg-card shadow-[inset_2px_0_0_#f59e0b]">
+          <p className="text-xs text-muted-foreground">
             {hiddenColdStorageCount} filtered event{hiddenColdStorageCount === 1 ? "" : "s"} not shown, no cold storage
             connected, so nothing was retained after your rules filtered them out.
           </p>
           <button
             onClick={() => navigate("/pipeline")}
-            className="text-xs font-medium text-amber-300 hover:text-amber-200 underline underline-offset-2 shrink-0"
+            className="text-xs font-medium text-primary hover:text-primary/80 underline underline-offset-2 shrink-0"
           >
             Connect cold storage
           </button>
@@ -470,7 +508,7 @@ export default function SearchExperience() {
       {status === "done" && results.length > 0 && (
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs text-muted-foreground">
-            <span className="font-mono-db text-foreground">{results.length}</span> results across {connected.length} source{connected.length === 1 ? "" : "s"}
+            <span className="font-mono-db text-foreground">{results.length}</span> results across {sourceCount} source{sourceCount === 1 ? "" : "s"}
           </p>
           <div className="flex gap-2">
             {(["parsed", "raw"] as const).map((m) => (
@@ -492,7 +530,7 @@ export default function SearchExperience() {
         <div className="flex flex-wrap items-center gap-1.5 mb-4">
           <button
             onClick={() => setSeverityFilter(null)}
-            className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
               severityFilter === null ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -505,7 +543,7 @@ export default function SearchExperience() {
               <button
                 key={level.key}
                 onClick={() => setSeverityFilter(severityFilter === level.key ? null : level.key)}
-                className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   severityFilter === level.key ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -555,7 +593,7 @@ export default function SearchExperience() {
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground/70 mt-4">
+          <p className="text-xs text-muted-foreground/70 mt-4">
             Plain language works. Cruz translates it into the query each store expects.
           </p>
         </div>

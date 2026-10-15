@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
-import { useSession, type WizardFieldState } from "@/app/lib/SessionContext";
+import { useSession, type WizardFieldState, type WizardKind } from "@/app/lib/SessionContext";
 import { CONNECTORS } from "@/app/data/connectors";
 import { VendorLogo, hasVendorLogo, chipSafeColor } from "./VendorLogo";
 
@@ -19,27 +19,38 @@ export interface WizardStep {
   hideBack?: boolean;
 }
 
+/** Where each kind of wizard came from, and goes back to. */
+const CATALOG: Record<WizardKind, { path: string; label: string }> = {
+  source: { path: "/sources", label: "Sources" },
+  destination: { path: "/destinations", label: "Destinations" },
+  notification: { path: "/notifications", label: "Notifications" },
+};
+
 /**
- * Principle 7: every connector, source or destination, runs through this same
- * shell. Publishes live state into `SessionContext` (7b) so Cruz never needs
- * re-briefing.
+ * Principle 7: everything a user connects, a source, a destination or a
+ * notification channel, runs through this same shell. Publishes live state
+ * into `SessionContext` (7b) so Cruz never needs re-briefing.
  */
 export function OnboardingWizard({
   connectorName,
   connectorKind,
   steps,
   onFinish,
+  logo,
 }: {
   connectorName: string;
-  connectorKind: "source" | "destination";
+  connectorKind: WizardKind;
   steps: WizardStep[];
   onFinish?: () => void;
+  /** For things not in the data connector catalog (a Slack workspace, a
+   * PagerDuty service), which bring their own mark. */
+  logo?: ReactNode;
 }) {
   const [index, setIndex] = useState(0);
   const navigate = useNavigate();
   const { setWizard } = useSession();
-  const catalogPath = connectorKind === "source" ? "/sources" : "/destinations";
-  const catalogLabel = connectorKind === "source" ? "Sources" : "Destinations";
+  const catalogPath = CATALOG[connectorKind].path;
+  const catalogLabel = CATALOG[connectorKind].label;
   const step = steps[index];
   const def = CONNECTORS.find((c) => c.name === connectorName);
 
@@ -90,20 +101,21 @@ export function OnboardingWizard({
             <nav aria-label="Breadcrumb" className="flex items-center min-w-0">
               <button
                 onClick={() => navigate(catalogPath)}
-                className="inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               >
                 <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
                 {catalogLabel}
               </button>
-              <span className="text-[13px] text-muted-foreground/40 mx-1.5">/</span>
-              <span className="text-[13px] text-foreground truncate">{connectorName}</span>
+              <span className="text-sm text-muted-foreground/40 mx-1.5">/</span>
+              <span className="text-sm text-foreground truncate">{connectorName}</span>
             </nav>
-            <span className="shrink-0 font-mono-db text-[11px] text-muted-foreground">
+            <span className="shrink-0 font-mono-db text-xs text-muted-foreground">
               Step {index + 1} of {steps.length}
             </span>
           </div>
 
           <div className="flex items-center gap-3 mt-4">
+            {!def && logo}
             {def && (
               <div
                 className="w-10 h-10 rounded flex items-center justify-center bg-white shrink-0"
@@ -112,15 +124,18 @@ export function OnboardingWizard({
                 {hasVendorLogo(def.id) ? (
                   <VendorLogo connectorId={def.id} size={20} />
                 ) : (
-                  <span className="text-[11px] font-bold" style={{ color: chipSafeColor(def.brandColor) }}>{def.initials}</span>
+                  <span className="text-xs font-bold" style={{ color: chipSafeColor(def.brandColor) }}>{def.initials}</span>
                 )}
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-[19px] leading-tight font-semibold text-foreground truncate">
+              <h1 className="text-lg leading-tight font-semibold text-foreground truncate">
                 Connect {connectorName}
               </h1>
-              <p className="text-[13px] text-muted-foreground">{step.label}</p>
+              {/* The step name, unless it would just repeat the title. */}
+              <p className="text-sm text-muted-foreground">
+                {step.label === `Connect ${connectorName}` ? "Enter credentials" : step.label}
+              </p>
             </div>
           </div>
 

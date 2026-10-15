@@ -4,6 +4,7 @@ import { X, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Switch } from "@/app/components/ui/switch";
 import { groupByCategory, liveCategoryStats, RULE_LIBRARY_TOTAL, type ReductionRule } from "@/app/data/rules";
+import { DRAWER_WIDTH } from "./PageLayout";
 import { CONNECTORS } from "@/app/data/connectors";
 
 /** The drawer is the quick glimpse, not the place to scroll through 300+
@@ -75,6 +76,7 @@ export function RulePanel({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[95] bg-background/70 backdrop-blur-sm flex justify-end"
+        style={{ paddingRight: "var(--cruz-width, 0px)" }}
         onClick={onClose}
       >
         <motion.div
@@ -83,7 +85,7 @@ export function RulePanel({
           exit={{ x: 40, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md h-full bg-card border-l border-border overflow-y-auto"
+          className={`w-full ${DRAWER_WIDTH} h-full bg-card border-l border-border overflow-y-auto`}
           role="dialog"
           aria-label="Reduction rules"
         >
@@ -111,12 +113,12 @@ export function RulePanel({
                 category so a 300+ rule scope doesn't turn into an endless
                 scroll in a narrow drawer. */}
             <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-border bg-muted/10">
-              <p className="text-[11px] text-muted-foreground/70">
+              <p className="text-xs text-muted-foreground/70">
                 A quick preview of your active rules, capped per category below.
               </p>
               <button
                 onClick={() => navigate("/rules", { state: { sourceId, category: active ?? undefined } })}
-                className="text-[11px] font-medium text-primary hover:text-primary/80 underline underline-offset-2 inline-flex items-center gap-1 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                className="text-xs font-medium text-primary hover:text-primary/80 underline underline-offset-2 inline-flex items-center gap-1 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               >
                 Browse all rules
                 <ArrowRight className="w-3 h-3" aria-hidden="true" />
@@ -127,7 +129,7 @@ export function RulePanel({
             <div className="flex flex-wrap gap-1.5 px-5 py-3 border-b border-border">
               <button
                 onClick={() => setActive(null)}
-                className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   !active ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -139,7 +141,7 @@ export function RulePanel({
                   <button
                     key={c}
                     onClick={() => setActive(active === c ? null : c)}
-                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                       active === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -165,7 +167,7 @@ export function RulePanel({
                 <div key={category}>
                   <div className="flex items-baseline justify-between mb-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{category}</p>
-                    <p className="text-[11px] font-mono-db text-muted-foreground">
+                    <p className="text-xs font-mono-db text-muted-foreground">
                       {statFor(category).active}/{statFor(category).applicable} on
                     </p>
                   </div>
@@ -183,7 +185,7 @@ export function RulePanel({
                   {hiddenCount > 0 && (
                     <button
                       onClick={() => navigate("/rules", { state: { sourceId, category } })}
-                      className="mt-2 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                      className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                     >
                       +{hiddenCount} more in this category
                       <ArrowRight className="w-3 h-3" aria-hidden="true" />
@@ -194,7 +196,7 @@ export function RulePanel({
             })}
             {scoped.length === 0 && <p className="text-sm text-muted-foreground">No rules applied in this scope.</p>}
 
-            <p className="text-[11px] text-muted-foreground/70 border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground/70 border-t border-border pt-4">
               Databahn maintains {RULE_LIBRARY_TOTAL}+ security-specific reduction rules,{" "}
               <span className="font-mono-db">{totals.applicable}</span> of them applicable in this scope.
             </p>
@@ -241,26 +243,26 @@ export function RuleRow({
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{rule.reason}</p>
-          {appliesTo && <p className="text-[11px] text-info/80 mt-1">Applies to: {appliesTo}</p>}
+          {appliesTo && <p className="text-xs text-info/80 mt-1">Applies to: {appliesTo}</p>}
           {isFocused && !rule.enabled && (
-            <p className="text-[11px] text-amber-400 mt-1">Off until you review and turn it on.</p>
+            <p className="text-xs text-amber-400 mt-1">Off until you review and turn it on.</p>
           )}
         </div>
         <Switch checked={rule.enabled} onCheckedChange={onToggle} aria-label={`Toggle ${rule.name}`} />
       </div>
-      <div className="mt-2 grid grid-cols-1 gap-1.5 font-mono-db text-[11px]">
+      <div className="mt-2 grid grid-cols-1 gap-1.5 font-mono-db text-xs">
         {/* Bare before/after lines read as broken text, not a diff, unless
             you already know the convention, labeling makes the strikethrough
             legible on its own instead of relying on that assumption. */}
         <div className="flex items-baseline gap-1.5">
-          <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground/50">Raw</span>
+          <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground/50">Raw</span>
           <span className={rule.enabled ? "text-muted-foreground line-through decoration-destructive/50" : "text-muted-foreground"}>
             {rule.before}
           </span>
         </div>
         {rule.enabled && (
           <div className="flex items-baseline gap-1.5">
-            <span className="shrink-0 text-[9px] uppercase tracking-wide text-success/50">Kept</span>
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-success/50">Kept</span>
             <span className="text-success/90">{rule.after}</span>
           </div>
         )}

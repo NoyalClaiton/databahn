@@ -93,14 +93,14 @@ export function FieldMappingEditor({
             <div key={r.raw} className={`px-3 py-2.5 ${dropped ? "opacity-55" : ""}`}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <code className="font-mono-db text-[12px] text-foreground">{r.raw}</code>
-                  <p className="font-mono-db text-[11px] text-muted-foreground truncate mt-0.5">{r.sample}</p>
+                  <code className="font-mono-db text-xs text-foreground">{r.raw}</code>
+                  <p className="font-mono-db text-xs text-muted-foreground truncate mt-0.5">{r.sample}</p>
                 </div>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="shrink-0 inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1.5 text-[12px] text-foreground hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1.5 text-xs text-foreground hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Change mapping for ${r.raw}`}
                     >
                       {dropped ? (
@@ -124,7 +124,7 @@ export function FieldMappingEditor({
               </div>
 
               {r.confidence !== "high" && !dropped && (
-                <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1.5">
+                <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-info shrink-0" aria-hidden="true" />
                   {r.confidence === "low"
                     ? "Cruz is unsure about this one, worth a look."
@@ -136,7 +136,7 @@ export function FieldMappingEditor({
         })}
       </div>
 
-      <motion.p layout className="text-[11px] text-muted-foreground mt-2.5">
+      <motion.p layout className="text-xs text-muted-foreground mt-2.5">
         Anything set to {UNMAPPED} is dropped at ingest, so it never reaches your SIEM or cold storage.
       </motion.p>
     </div>

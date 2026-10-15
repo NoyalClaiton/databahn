@@ -1,4 +1,5 @@
 import type { ConnectedEntity, WizardState } from "./SessionContext";
+import type { HealthSummary } from "./environment";
 
 export interface CruzContextPanel {
   heading: string;
@@ -15,6 +16,7 @@ export function getCruzContext(
   wizard: WizardState | null,
   connected: ConnectedEntity[],
   coldStorageConnected = false,
+  health?: HealthSummary,
 ): CruzContextPanel {
   if (wizard) {
     const step = wizard.stepLabel.toLowerCase();
@@ -94,6 +96,12 @@ export function getCruzContext(
             watching: "One match is lower confidence, I flagged it inline.",
           };
     }
+    if (wizard.connectorKind === "notification" && (step.includes("connected") || step.includes("success")))
+      return {
+        heading: `${wizard.connectorName} is connected`,
+        handled: ["Test message confirmed delivered", "Routing saved by severity"],
+        watching: "When a source stops or a destination rejects data, the alert goes out there automatically.",
+      };
     if (step.includes("connected") || step.includes("success"))
       // "Applied the default reduction rules" and "started routing to your
       // destinations" are both source-only facts, a destination doesn't
@@ -134,20 +142,53 @@ export function getCruzContext(
     };
   }
 
-  const srcCount = connected.filter((c) => c.kind === "source").length;
-  const dstCount = connected.filter((c) => c.kind === "destination").length;
+  // The environment's count when there is one, so the sample environment's
+  // 170 sources don't read as "no sources connected".
+  const srcCount = health ? health.total : connected.filter((c) => c.kind === "source").length;
+  const dstCount = health ? health.destTotal : connected.filter((c) => c.kind === "destination").length;
+
+  if (pathname.startsWith("/notifications"))
+    return {
+      heading: "Where alerts go",
+      handled: ["Critical and high alerts go out the moment they happen", "One message per problem, updated when it recovers"],
+      watching: "Slack is the quickest to connect. Add PagerDuty if someone should be paged for critical alerts.",
+    };
+
+  // Outside a wizard, an open alert outranks anything else Cruz could say on
+  // the overview screens. Cruz has already done the first pass of triage,
+  // so it leads with where to look rather than "ask me."
+  // Same count as the dashboard's Alerts heading (every alert, not just
+  // incidents), led by the incidents themselves.
+  const allAlerts = health?.alerts ?? [];
+  const open = allAlerts.filter((a) => a.kind === "incident");
+  if (open.length > 0 && (pathname === "/" || pathname.startsWith("/pipeline"))) {
+    const critical = open.filter((a) => a.severity === "critical").length;
+    return {
+      heading: `${allAlerts.length} open alert${allAlerts.length === 1 ? "" : "s"}${critical ? `, ${critical} critical` : ""}`,
+      handled: open.slice(0, 3).map((a) => (a.likelyCause ? `${a.title}. Likely: ${a.likelyCause}` : a.title)),
+      watching: "Triage is ready on each one. I'll tell you if anything else stops, or one of these recovers.",
+    };
+  }
 
   if (pathname.startsWith("/pipeline"))
     return {
-      heading: "Watching your pipeline",
-      handled: [
-        `Monitoring ${srcCount || "no"} source${srcCount === 1 ? "" : "s"} for schema drift`,
-        "Applying reduction rules in-stream",
-        coldStorageConnected
-          ? "Routing filtered events to cold storage, not deleting them"
-          : "No cold storage connected, filtered events aren't being retained",
-      ],
-      watching: "I'll flag it here if a source stops sending.",
+      ...(srcCount === 0
+        ? {
+            heading: "Nothing flowing yet",
+            handled: ["No sources connected", "Reduction rules apply automatically once one is"],
+            watching: "Connect a source and its data shows up here within a minute.",
+          }
+        : {
+            heading: "Watching your pipeline",
+            handled: [
+              `Monitoring ${srcCount} source${srcCount === 1 ? "" : "s"} for schema drift`,
+              "Applying reduction rules in-stream",
+              coldStorageConnected
+                ? "Routing filtered events to cold storage, not deleting them"
+                : "No cold storage connected, filtered events aren't being retained",
+            ],
+            watching: "I'll flag it here if a source stops sending.",
+          }),
     };
   if (pathname.startsWith("/search"))
     return srcCount > 0
@@ -161,7 +202,7 @@ export function getCruzContext(
         }
       : {
           heading: "Nothing to search yet",
-          handled: ["No sources connected", "Sample results shown so you can explore the experience"],
+          handled: ["No sources connected", "Search covers every source once one is connected"],
           watching: "Connect a source and this searches your real data.",
         };
   if (pathname.startsWith("/graph"))
@@ -192,7 +233,10 @@ export function getCruzContext(
  * step. This is the concrete answer to "Cruz should show recommendations at
  * every screen", not a static greeting, a live read of where the user is.
  */
-export function getRecommendations(pathname: string, wizard: WizardState | null): string[] {
+export function getRecommendations(pathname: string, wizard: WizardState | null, health?: HealthSummary): string[] {
+  const top = health?.alerts.find((a) => a.kind === "incident");
+  if (!wizard && top && (pathname === "/" || pathname.startsWith("/pipeline")))
+    return [`What should I check for ${top.open.name}?`, "What did I miss while sources were down?"];
   if (wizard) {
     const step = wizard.stepLabel.toLowerCase();
     if (step.includes("listener")) return ["Why UDP 514 for Palo Alto?", "Where do I find syslog settings on my firewall?"];
@@ -216,6 +260,10 @@ export function getRecommendations(pathname: string, wizard: WizardState | null)
       return ["Where do I find my Sentinel workspace ID?", "Why is OAuth recommended here?"];
     if (step.includes("connect") && wizard.connectorName.includes("Splunk"))
       return ["Where do I find my Splunk HEC token?"];
+    if (wizard.connectorKind === "notification")
+      return step.includes("where")
+        ? ["Which alerts should go here?", "What's the difference between critical and high?"]
+        : ["What will a message look like?", "Who gets notified?"];
     if (step.includes("connected") || step.includes("success"))
       return wizard.connectorKind === "source"
         ? ["What happens to this data now?", "How do I add another source?"]

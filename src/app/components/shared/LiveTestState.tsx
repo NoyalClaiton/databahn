@@ -40,6 +40,7 @@ export function LiveTestState({
   successSampleLines,
   checklist,
   onComplete,
+  escapeHatchLabel = "Continue, I'll send a sample later",
 }: {
   targetLabel: string;
   /** Palo Alto's syslog step is the one genuine passive listener, waiting
@@ -54,6 +55,10 @@ export function LiveTestState({
   successSampleLines: string[];
   checklist: string[];
   onComplete: (result: LiveTestResult) => void;
+  /** Onboarding's way out is "send a sample later"; fixing a stopped source
+   * from its health drawer needs "keep investigating" instead, same
+   * non-blocking exit, different situation. */
+  escapeHatchLabel?: string;
 }) {
   const isListening = mode === "listen";
   const [phase, setPhase] = useState<"listening" | "partial" | "success" | "timeout">("listening");
@@ -126,7 +131,7 @@ export function LiveTestState({
           setAttempt((a) => a + 1);
         }}
         escapeHatch={{
-          label: "Continue, I'll send a sample later",
+          label: escapeHatchLabel,
           onClick: () => onComplete("skipped"),
         }}
       />
@@ -199,7 +204,7 @@ export function LiveTestState({
         // reading as a feature that ships.
         <button
           onClick={simulateFailure}
-          className="mt-4 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
+          className="mt-4 text-xs text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
         >
           Simulate a failed connection (demo)
         </button>

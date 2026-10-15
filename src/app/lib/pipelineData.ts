@@ -83,7 +83,7 @@ export interface Savings {
   isPotential: boolean;
 }
 
-const rateFor = (destId: string) => INGEST_RATE_PER_GB[destId] ?? DEFAULT_INGEST_RATE;
+export const rateFor = (destId: string) => INGEST_RATE_PER_GB[destId] ?? DEFAULT_INGEST_RATE;
 
 /**
  * What reduction is worth in money rather than percent, broken down per source
@@ -105,7 +105,7 @@ export function buildSavings(
   // Per source, not one global factor: a global average would credit a quiet
   // identity feed with the firewall's reducibility and vice versa.
   const filteredBySource = new Map(
-    sourceNodes.map((s) => [s.id, s.volume * liveReductionFactor(rules, [s])] as const),
+    sourceNodes.map((s) => [s.id, s.volume * (s.reduction ?? liveReductionFactor(rules, [s]))] as const),
   );
 
   const perSource: SourceSaving[] = sourceNodes
@@ -201,7 +201,9 @@ const fmtCount = (n: number) =>
 
 export interface ActivityEvent {
   id: string;
-  kind: "archive" | "unretained" | "connect";
+  /** down/recovered/ack are health events, merged in by the dashboard so the
+   * feed says what happened to sources, not just how they were set up. */
+  kind: "archive" | "unretained" | "connect" | "down" | "recovered" | "ack";
   text: string;
   detail?: string;
   minutesAgo: number;
@@ -222,23 +224,26 @@ export function buildActivity(
   const hasCold = coldStorage.length > 0;
   const coldLabel = coldStorage[0]?.label ?? "cold storage";
 
-  const flow: ActivityEvent[] = perSource
-    .filter((s) => s.gbPerDayFiltered > 0)
-    .map((s, i) => {
-      const gbLastHour = s.gbPerDayFiltered / 24;
-      const eventsLastHour = (gbLastHour * 1e9) / BYTES_PER_EVENT;
-      return {
-        id: `flow-${s.id}`,
-        kind: hasCold ? ("archive" as const) : ("unretained" as const),
-        text: hasCold
-          ? `${fmtCount(eventsLastHour)} events from ${s.name} archived to ${coldLabel}`
-          : `${fmtCount(eventsLastHour)} events from ${s.name} filtered with no retention`,
-        detail: `${fmtGbValue(gbLastHour)} in the last hour`,
-        // Staggered rather than timestamped: this is a rolling flow, not a
-        // discrete event that happened at one moment.
-        minutesAgo: 2 + i * 5,
-      };
-    });
+  // One rolled-up line for the last hour, not one per source: at scale the
+  // per-source version filled the feed with the same warning, pushing the
+  // events that actually happened (stops, recoveries, ownership) out of view.
+  const filtering = perSource.filter((s) => s.gbPerDayFiltered > 0);
+  const gbLastHour = filtering.reduce((a, s) => a + s.gbPerDayFiltered, 0) / 24;
+  const eventsLastHour = (gbLastHour * 1e9) / BYTES_PER_EVENT;
+  const flow: ActivityEvent[] =
+    filtering.length === 0
+      ? []
+      : [
+          {
+            id: "flow-all",
+            kind: hasCold ? ("archive" as const) : ("unretained" as const),
+            text: hasCold
+              ? `${fmtCount(eventsLastHour)} filtered events archived to ${coldLabel}`
+              : `${fmtCount(eventsLastHour)} filtered events not retained`,
+            detail: `${fmtGbValue(gbLastHour)} from ${filtering.length} source${filtering.length === 1 ? "" : "s"} in the last hour`,
+            minutesAgo: 2,
+          },
+        ];
 
   const setup: ActivityEvent[] = [
     ...connected.map((c) => ({
